@@ -1,0 +1,3 @@
+[submodule "cs16-client"]
+	path = cs16-client
+	ignore = dirty
