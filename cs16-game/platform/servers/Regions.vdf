@@ -1,0 +1,18 @@
+"Regions"
+{
+	"255"
+	{
+		"text"	"#ServerBrowser_All"
+		"code"	"255"
+	}
+	"0"
+	{
+		"text"	"#ServerBrowser_CIS"
+		"code"	"0"
+	}
+	"1"
+	{
+		"text"	"#ServerBrowser_Europe"
+		"code"	"1"
+	}
+}

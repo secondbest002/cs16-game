@@ -1,0 +1,355 @@
+"Countries"
+{
+	"0"
+	{
+		"code"	"RU"
+	}
+	"1"
+	{
+		"code"	"BY"
+	}
+	"2"
+	{
+		"code"	"KZ"
+	}
+	"3"
+	{
+		"code"	"UA"
+	}
+	"4"
+	{
+		"code"	"UZ"
+	}
+	"5"
+	{
+		"code"	"AM"
+	}
+	"6"
+	{
+		"code"	"AZ"
+	}
+	"7"
+	{
+		"code"	"GE"
+	}
+	"8"
+	{
+		"code"	"MD"
+	}
+	"9"
+	{
+		"code"	"KG"
+	}
+	"10"
+	{
+		"code"	"TJ"
+	}
+	"11"
+	{
+		"code"	"TM"
+	}
+	"12"
+	{
+		"code"	"PL"
+	}
+	"13"
+	{
+		"code"	"CZ"
+	}
+	"14"
+	{
+		"code"	"SK"
+	}
+	"15"
+	{
+		"code"	"HU"
+	}
+	"16"
+	{
+		"code"	"RO"
+	}
+	"17"
+	{
+		"code"	"BG"
+	}
+	"18"
+	{
+		"code"	"EE"
+	}
+	"19"
+	{
+		"code"	"LV"
+	}
+	"20"
+	{
+		"code"	"LT"
+	}
+	"21"
+	{
+		"code"	"RS"
+	}
+	"22"
+	{
+		"code"	"HR"
+	}
+	"23"
+	{
+		"code"	"BA"
+	}
+	"24"
+	{
+		"code"	"SI"
+	}
+	"25"
+	{
+		"code"	"MK"
+	}
+	"26"
+	{
+		"code"	"AL"
+	}
+	"27"
+	{
+		"code"	"DE"
+	}
+	"28"
+	{
+		"code"	"FR"
+	}
+	"29"
+	{
+		"code"	"GB"
+	}
+	"30"
+	{
+		"code"	"NL"
+	}
+	"31"
+	{
+		"code"	"SE"
+	}
+	"32"
+	{
+		"code"	"FI"
+	}
+	"33"
+	{
+		"code"	"NO"
+	}
+	"34"
+	{
+		"code"	"DK"
+	}
+	"35"
+	{
+		"code"	"IT"
+	}
+	"36"
+	{
+		"code"	"ES"
+	}
+	"37"
+	{
+		"code"	"PT"
+	}
+	"38"
+	{
+		"code"	"CH"
+	}
+	"39"
+	{
+		"code"	"IE"
+	}
+	"40"
+	{
+		"code"	"AT"
+	}
+	"41"
+	{
+		"code"	"BE"
+	}
+	"42"
+	{
+		"code"	"GR"
+	}
+	"43"
+	{
+		"code"	"LU"
+	}
+	"44"
+	{
+		"code"	"IS"
+	}
+	"45"
+	{
+		"code"	"CY"
+	}
+	"46"
+	{
+		"code"	"US"
+	}
+	"47"
+	{
+		"code"	"CA"
+	}
+	"48"
+	{
+		"code"	"MX"
+	}
+	"49"
+	{
+		"code"	"PA"
+	}
+	"50"
+	{
+		"code"	"CR"
+	}
+	"51"
+	{
+		"code"	"BR"
+	}
+	"52"
+	{
+		"code"	"AR"
+	}
+	"53"
+	{
+		"code"	"CL"
+	}
+	"54"
+	{
+		"code"	"CO"
+	}
+	"55"
+	{
+		"code"	"PE"
+	}
+	"56"
+	{
+		"code"	"VE"
+	}
+	"57"
+	{
+		"code"	"UY"
+	}
+	"58"
+	{
+		"code"	"PY"
+	}
+	"59"
+	{
+		"code"	"BO"
+	}
+	"60"
+	{
+		"code"	"EC"
+	}
+	"61"
+	{
+		"code"	"CN"
+	}
+	"62"
+	{
+		"code"	"JP"
+	}
+	"63"
+	{
+		"code"	"KR"
+	}
+	"64"
+	{
+		"code"	"TW"
+	}
+	"65"
+	{
+		"code"	"HK"
+	}
+	"66"
+	{
+		"code"	"SG"
+	}
+	"67"
+	{
+		"code"	"IN"
+	}
+	"68"
+	{
+		"code"	"ID"
+	}
+	"69"
+	{
+		"code"	"MY"
+	}
+	"70"
+	{
+		"code"	"TH"
+	}
+	"71"
+	{
+		"code"	"VN"
+	}
+	"72"
+	{
+		"code"	"PH"
+	}
+	"73"
+	{
+		"code"	"PK"
+	}
+	"74"
+	{
+		"code"	"BD"
+	}
+	"75"
+	{
+		"code"	"MN"
+	}
+	"76"
+	{
+		"code"	"AE"
+	}
+	"77"
+	{
+		"code"	"SA"
+	}
+	"78"
+	{
+		"code"	"IL"
+	}
+	"79"
+	{
+		"code"	"TR"
+	}
+	"80"
+	{
+		"code"	"QA"
+	}
+	"81"
+	{
+		"code"	"KW"
+	}
+	"82"
+	{
+		"code"	"EG"
+	}
+	"83"
+	{
+		"code"	"DZ"
+	}
+	"84"
+	{
+		"code"	"MA"
+	}
+	"85"
+	{
+		"code"	"ZA"
+	}
+	"86"
+	{
+		"code"	"AU"
+	}
+	"87"
+	{
+		"code"	"NZ"
+	}
+}

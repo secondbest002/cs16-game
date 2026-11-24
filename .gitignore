@@ -1,0 +1,96 @@
+# ==============================================================================
+# 1. ARCHIVE, BACKUPS & EXTERNAL DIRECTORIES
+# ==============================================================================
+_archive_amxx/
+cs16-skins&misc/
+cs16-emptyx-customization/
+.studio_glove_presets/
+**/.studio_backups/
+**/*.bak
+**/*.orig*
+**/*.pre_*
+**/*_backup*/
+**/*_backups*/
+
+# ==============================================================================
+# 2. GAME ASSETS & HEAVY BINARIES (Models, Maps, Audio, Textures, Waypoints, Archives)
+# ==============================================================================
+*.bsp
+*.mdl
+*.spr
+*.wav
+*.mp3
+*.wad
+*.bmp
+*.tga
+*.png
+*.jpg
+*.dem
+*.graph
+*.pmx
+*.prc
+*.vis
+*.dat
+*.vault
+*.nvault
+*.bin
+*.nav
+*.mmdb
+*.db
+*.cs16skin
+*.smd
+*.qc
+*.vtf
+*.vmt
+*.ms3d
+*.sc
+*.zip
+*.rar
+*.7z
+*.tar
+*.gz
+*.pk3
+*.ztmp
+
+# ==============================================================================
+# 3. COMPILED BINARIES & DEBUG SYMBOLS
+# ==============================================================================
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+*.o
+*.amxx
+*.amx
+build/
+out/
+.vs/
+CMakeCache.txt
+CMakeFiles/
+
+# ==============================================================================
+# 4. RUNTIME LOGS, USER STATE & EPHEMERAL FILES
+# ==============================================================================
+*.log
+**/*.log
+**/logs/*.log
+**/logs/*.txt
+**/qconsole.log
+**/console.log
+cs16-game/cstrike/mode.cfg
+cs16-game/cstrike/addons/amxmodx/configs/plugins.ini
+cs16-game/cstrike/addons/amxmodx/data/matches/*.json
+cs16-game/cstrike/addons/amxmodx/scripting/compile.dat
+
+# ==============================================================================
+# 5. EXPLICITLY TRACKED EXCEPTIONS (Never Ignore)
+# ==============================================================================
+!cs16-game/cstrike/addons/amxmodx/configs/plugins-competitive.ini
+!cs16-game/cstrike/addons/amxmodx/configs/plugins-deathmatch.ini
+!cs16-game/cstrike/addons/amxmodx/configs/plugins-practice.ini
+!cs16-game/cstrike/addons/amxmodx/data/redm/*.spawns.json

@@ -1,0 +1,64 @@
+"Resource/ColorPicker.res"
+{
+	"ColorPicker"
+	{
+		"ControlName"	"ColorPickerPanel"
+		"fieldName"		"ColorPicker"
+		"xpos"			"0"
+		"ypos"			"0"
+		"wide"			"480"
+		"tall"			"210"
+		"settitlebarvisible"	"1"
+		"title"		"#Frame_Untitled"
+	}
+	"ColorXYPreview"
+	{
+		"ControlName"	"Panel"
+		"fieldName"		"ColorXYPreview"
+		"xpos"			"148"
+		"ypos"			"5"
+		"wide"			"320"
+		"tall"			"180"
+		"visible"		"1"
+		"enabled"		"1"
+	}
+	"ColorZPreview"
+	{
+		"ControlName"	"CColorZPreview"
+		"fieldName"		"ColorZPreview"
+		"xpos"			"148"
+		"ypos"			"187"
+		"wide"			"320"
+		"tall"			"20"
+		"visible"		"1"
+		"enabled"		"1"
+	}
+	"ColorsPreviewPanel"
+	{
+		"ControlName"	"Panel"
+		"fieldName"		"ColorsPreviewPanel"
+		"xpos"		"20"
+		"ypos"		"15"
+		"wide"		"118"
+		"tall"		"160"
+		"AutoResize"		"0"
+		"PinCorner"		"0"
+		"visible"		"1"
+		"enabled"		"1"
+	}
+	"RgbTextEntry"
+	{
+		"ControlName"		"TextEntry"
+		"fieldName"		"RgbTextEntry"
+		"xpos"			"20"
+		"ypos"			"183"
+		"wide"			"118"
+		"tall"			"24"
+		"visible"		"1"
+		"enabled"		"1"
+		"labelText"			""
+		"textAlignment"		"west"
+		"dulltext"			"0"
+		"brighttext"		"0"
+	}
+}

@@ -1,0 +1,61 @@
+fps_max 120
+fps_override 1
+pause 1
+pausable 1
+pause
+pause 
+molotov
+gl_vsync 1
+pausable 1
+pause
+gl_vsync 1
+molotov
+crosshair 
+crosshair 1
+crosshair "1"
+gl_vsync 1
+cl_viewbob 0
+cl
+cl_
+pausable 1
+pause
+pause 
+cl_viewbob 0
+cl_bob 0
+cl_bob 0.05
+cl_bob 0
+cl_bob 0.02
+cl_bobup 0
+map de_dust2
+cl_bob 0
+cl_bob 0.002
+cl_bob 0.004
+cl_bob 0.002
+cl_bob 0.008
+cl_rollangle 0.002
+cl_viewbob 0.001
+cl_bob 0.05
+cl_bob 0.005
+pausable 1
+paus
+pause 
+pause
+map de_dust2
+cl_viewbob 1
+cl_viewbob 0
+cl_crosshair_size 0.03
+map de_dust2
+pause 
+cl_bob 0
+cl_bob 0.002
+/ffa
+ffa
+dm ffa
+deathmatch free_for_all
+map de_dust2
+deathmatch ffa
+map de_dust2
+kick all
+cl_bobup  0
+restart 
+map de_dust2

@@ -1,0 +1,106 @@
+"filters"
+{
+	"favorites"
+	{
+		"1"
+		{
+			"name"		"46.174.55.244:27015"
+			"address"		"46.174.55.244:27015"
+			"createdat"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"2"
+		{
+			"name"		"█     ЗОЛОТАЯ ГВАРДИЯ  █    VIP ВСЕМ  █"
+			"address"		"46.174.50.225:27015"
+			"createdat"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"3"
+		{
+			"name"		"█     ЖЕНСКИЙ БЕСПРЕДЕЛ  █    MEAT74.COM █"
+			"address"		"46.174.48.182:27015"
+			"createdat"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"4"
+		{
+			"name"		"# [ZM] CS-DREAM | ZOMBIE CLASSIC"
+			"address"		"zm.cs-dream.su:27015"
+			"createdat"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"5"
+		{
+			"name"		"ADRENALINE |  VIP ВСЕМ"
+			"address"		"62.122.215.76:27015"
+			"createdat"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"6"
+		{
+			"name"		"РЭП ВОЙСКА   █    EXCLUSIVE PUBLIC  █    FREE VIP"
+			"address"		"46.174.53.241:27015"
+			"createdat"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+	}
+	"history"
+	{
+		"1"
+		{
+			"name"		"46.174.55.244:27015"
+			"address"		"46.174.55.244:27015"
+			"lastplayed"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"2"
+		{
+			"name"		"█     ЗОЛОТАЯ ГВАРДИЯ  █    VIP ВСЕМ  █"
+			"address"		"46.174.50.225:27015"
+			"lastplayed"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"3"
+		{
+			"name"		"█     ЖЕНСКИЙ БЕСПРЕДЕЛ  █    MEAT74.COM █"
+			"address"		"46.174.48.182:27015"
+			"lastplayed"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"4"
+		{
+			"name"		"# [ZM] CS-DREAM | ZOMBIE CLASSIC"
+			"address"		"zm.cs-dream.su:27015"
+			"lastplayed"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"5"
+		{
+			"name"		"ADRENALINE |  VIP ВСЕМ"
+			"address"		"62.122.215.76:27015"
+			"lastplayed"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+		"6"
+		{
+			"name"		"РЭП ВОЙСКА   █    EXCLUSIVE PUBLIC  █    FREE VIP"
+			"address"		"46.174.53.241:27015"
+			"lastplayed"		"1794740462"
+			"appID"		"10"
+			"accountid"		"0"
+		}
+	}
+	"lastupdate"		"1794750424"
+}
