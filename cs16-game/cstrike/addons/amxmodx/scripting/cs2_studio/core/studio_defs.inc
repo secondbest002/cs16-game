@@ -38,7 +38,8 @@ enum _:PlayerHudProfile
     HUD_CH_COLOR_B,             // cl_crosshaircolor_b / xhair_color B (0 - 255)
 
     HUD_SNIPER_WIDTH,           // cl_crosshair_sniper_width (1 - 10)
-    HUD_SNIPER_STYLE,           // cl_crosshair_sniper_style (0=Classic, 1=CS2 Frameless, 2=Dot)
+    HUD_SNIPER_STYLE,           // cl_crosshair_sniper_style (0=Classic, 1=CS2 Vignette, 2=Dot, 3=CS2 Frameless)
+    HUD_SNIPER_POSTS,           // cl_crosshair_sniper_outer_posts (0=Uniform Thin, 1=Thick Outer Posts)
     HUD_SNIPER_BLUR,            // cl_crosshair_sniper_show_normal_inaccuracy (0 / 1)
     HUD_SNIPER_BOB,             // cl_bob_sniper (0 / 1)
 
@@ -74,9 +75,10 @@ new const g_szHudColorNames[][] = {
 };
 
 new const g_szHudSniperStyles[][] = {
-    "Classic Static Scope",
-    "Modern CS2 Frameless",
-    "Center Dot Only"
+    "Classic CS 1.6 Scope",
+    "CS2 Modern Scope (Vignette)",
+    "Center Dot Only",
+    "CS2 Frameless (No Vignette)"
 };
 
 new const g_szHudColorRGB[][][] = {

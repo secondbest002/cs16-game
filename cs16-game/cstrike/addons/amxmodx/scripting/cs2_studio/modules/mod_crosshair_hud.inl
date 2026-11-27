@@ -97,8 +97,9 @@ stock ResetToDefaults(id)
     g_ePlayerHud[id][HUD_CH_COLOR_G]        = 250;
     g_ePlayerHud[id][HUD_CH_COLOR_B]        = 50;
 
-    g_ePlayerHud[id][HUD_SNIPER_WIDTH]      = 2;
-    g_ePlayerHud[id][HUD_SNIPER_STYLE]      = 1;    // CS2 Frameless Reticle by default
+    g_ePlayerHud[id][HUD_SNIPER_WIDTH]      = 1;
+    g_ePlayerHud[id][HUD_SNIPER_STYLE]      = 1;    // CS2 Modern Scope (Vignette) by default
+    g_ePlayerHud[id][HUD_SNIPER_POSTS]      = 0;    // Uniform thin hairline by default
     g_ePlayerHud[id][HUD_SNIPER_BLUR]       = 1;    // Movement inaccuracy blur
     g_ePlayerHud[id][HUD_SNIPER_BOB]        = 0;
 
@@ -220,8 +221,8 @@ stock Hud_Sync_SniperSettings(id)
     if (!is_user_connected(id) || is_user_bot(id) || is_user_hltv(id))
         return;
 
-    client_cmd(id, "cl_crosshair_sniper_width %d;cl_crosshair_sniper_style %d",
-        g_ePlayerHud[id][HUD_SNIPER_WIDTH], g_ePlayerHud[id][HUD_SNIPER_STYLE]);
+    client_cmd(id, "cl_crosshair_sniper_width %d;cl_crosshair_sniper_style %d;cl_crosshair_sniper_outer_posts %d",
+        g_ePlayerHud[id][HUD_SNIPER_WIDTH], g_ePlayerHud[id][HUD_SNIPER_STYLE], g_ePlayerHud[id][HUD_SNIPER_POSTS]);
     client_cmd(id, "cl_crosshair_sniper_show_normal_inaccuracy %d;cl_bob_sniper %d",
         g_ePlayerHud[id][HUD_SNIPER_BLUR], g_ePlayerHud[id][HUD_SNIPER_BOB]);
     client_cmd(id, "cl_bobcycle_sniper 0.98;cl_bobup_sniper 0.5");
@@ -468,14 +469,17 @@ public Hud_Cmd_OpenSniperMenu(id)
     formatex(szItem, charsmax(szItem), "Scope Style: \y%s", g_szHudSniperStyles[g_ePlayerHud[id][HUD_SNIPER_STYLE]]);
     menu_additem(hMenu, szItem, "2");
 
-    formatex(szItem, charsmax(szItem), "Dynamic Blur on Movement: %s", g_ePlayerHud[id][HUD_SNIPER_BLUR] ? "\y[ON]" : "\d[OFF]");
+    formatex(szItem, charsmax(szItem), "Scope Outer Edges: %s", g_ePlayerHud[id][HUD_SNIPER_POSTS] ? "\y[Thick Posts]" : "\y[Uniform Thin]");
     menu_additem(hMenu, szItem, "3");
 
-    formatex(szItem, charsmax(szItem), "Sniper Bobcycle (Scope Sway): %s", g_ePlayerHud[id][HUD_SNIPER_BOB] ? "\y[ON - 0.98]" : "\d[OFF - Locked]");
+    formatex(szItem, charsmax(szItem), "Dynamic Blur on Movement: %s", g_ePlayerHud[id][HUD_SNIPER_BLUR] ? "\y[ON]" : "\d[OFF]");
     menu_additem(hMenu, szItem, "4");
 
-    menu_additem(hMenu, "\yBack to:\w Crosshair - Basic (/crosshair)", "5");
-    menu_additem(hMenu, "\ySwitch to:\w Misc HUD & Radar (/hud)", "6");
+    formatex(szItem, charsmax(szItem), "Sniper Bobcycle (Scope Sway): %s", g_ePlayerHud[id][HUD_SNIPER_BOB] ? "\y[ON - 0.98]" : "\d[OFF - Locked]");
+    menu_additem(hMenu, szItem, "5");
+
+    menu_additem(hMenu, "\yBack to:\w Crosshair - Basic (/crosshair)", "6");
+    menu_additem(hMenu, "\ySwitch to:\w Misc HUD & Radar (/hud)", "7");
 
     menu_setprop(hMenu, MPROP_EXIT, MEXIT_ALL);
     menu_display(id, hMenu, 0);
@@ -511,16 +515,21 @@ public Handler_SniperMenu(id, hMenu, item)
         }
         case 3:
         {
-            g_ePlayerHud[id][HUD_SNIPER_BLUR] = !g_ePlayerHud[id][HUD_SNIPER_BLUR];
+            g_ePlayerHud[id][HUD_SNIPER_POSTS] = !g_ePlayerHud[id][HUD_SNIPER_POSTS];
             Hud_Sync_SniperSettings(id);
         }
         case 4:
         {
+            g_ePlayerHud[id][HUD_SNIPER_BLUR] = !g_ePlayerHud[id][HUD_SNIPER_BLUR];
+            Hud_Sync_SniperSettings(id);
+        }
+        case 5:
+        {
             g_ePlayerHud[id][HUD_SNIPER_BOB] = !g_ePlayerHud[id][HUD_SNIPER_BOB];
             Hud_Sync_SniperSettings(id);
         }
-        case 5: return Hud_Cmd_OpenCrosshairMenu(id);
-        case 6: return Hud_Cmd_OpenMiscHudMenu(id);
+        case 6: return Hud_Cmd_OpenCrosshairMenu(id);
+        case 7: return Hud_Cmd_OpenMiscHudMenu(id);
     }
 
     g_bHudHasProfile[id] = true;
@@ -627,6 +636,7 @@ public Hud_Cmd_SaveCrosshair(id)
     query_client_cvar(id, "xhair_color", "CvarQuery_ImportColor");
     query_client_cvar(id, "cl_crosshair_sniper_style", "CvarQuery_ImportSniperStyle");
     query_client_cvar(id, "cl_crosshair_sniper_width", "CvarQuery_ImportSniperWidth");
+    query_client_cvar(id, "cl_crosshair_sniper_outer_posts", "CvarQuery_ImportSniperPosts");
 
     remove_task(id + TASK_HUD_SAVE);
     set_task(0.3, "Task_DeferredSaveProfile", id + TASK_HUD_SAVE);
@@ -691,7 +701,7 @@ public CvarQuery_ImportSniperStyle(id, const szCvar[], const szValue[], const sz
 {
     if (is_user_connected(id) && !equal(szValue, "Bad CVAR request"))
     {
-        g_ePlayerHud[id][HUD_SNIPER_STYLE] = str_to_num(szValue);
+        g_ePlayerHud[id][HUD_SNIPER_STYLE] = clamp(str_to_num(szValue), 0, sizeof(g_szHudSniperStyles) - 1);
     }
 }
 
@@ -699,7 +709,15 @@ public CvarQuery_ImportSniperWidth(id, const szCvar[], const szValue[], const sz
 {
     if (is_user_connected(id) && !equal(szValue, "Bad CVAR request"))
     {
-        g_ePlayerHud[id][HUD_SNIPER_WIDTH] = str_to_num(szValue);
+        g_ePlayerHud[id][HUD_SNIPER_WIDTH] = clamp(str_to_num(szValue), 1, 10);
+    }
+}
+
+public CvarQuery_ImportSniperPosts(id, const szCvar[], const szValue[], const szParam[])
+{
+    if (is_user_connected(id) && !equal(szValue, "Bad CVAR request"))
+    {
+        g_ePlayerHud[id][HUD_SNIPER_POSTS] = clamp(str_to_num(szValue), 0, 1);
     }
 }
 
@@ -727,7 +745,7 @@ stock SaveProfileToVault(id)
     new szKey[64], szData[256];
     Studio_BuildPlayerKey(id, szKey, charsmax(szKey));
 
-    formatex(szData, charsmax(szData), "%d %.1f %.1f %.1f %d %d %d %.1f %d %d %d %d %d %d %d %d %d %d %d %d %d %d %.2f %d",
+    formatex(szData, charsmax(szData), "%d %.1f %.1f %.1f %d %d %d %.1f %d %d %d %d %d %d %d %d %d %d %d %d %d %d %.2f %d %d",
         g_ePlayerHud[id][HUD_CH_STYLE],
         Float:g_ePlayerHud[id][HUD_CH_SIZE],
         Float:g_ePlayerHud[id][HUD_CH_THICKNESS],
@@ -751,7 +769,8 @@ stock SaveProfileToVault(id)
         g_ePlayerHud[id][HUD_RADAR_SQUARE],
         g_ePlayerHud[id][HUD_RADAR_LOCKED],
         Float:g_ePlayerHud[id][HUD_RADAR_SCALE],
-        g_ePlayerHud[id][HUD_COLOR_PRESET]);
+        g_ePlayerHud[id][HUD_COLOR_PRESET],
+        g_ePlayerHud[id][HUD_SNIPER_POSTS]);
 
     nvault_set(g_hHudVault, szKey, szData);
     g_bHudProfileDirty[id] = false;
@@ -769,7 +788,7 @@ stock bool:LoadProfileFromVault(id)
     if (!nvault_lookup(g_hHudVault, szKey, szData, charsmax(szData), iTimestamp))
         return false;
 
-    new szTokens[24][16];
+    new szTokens[25][16];
     new iCount = explode_string(szData, " ", szTokens, sizeof(szTokens), charsmax(szTokens[]));
     if (iCount < 16)
         return false;
@@ -793,8 +812,8 @@ stock bool:LoadProfileFromVault(id)
 
     if (iCount >= 20)
     {
-        g_ePlayerHud[id][HUD_SNIPER_WIDTH]  = str_to_num(szTokens[16]);
-        g_ePlayerHud[id][HUD_SNIPER_STYLE]  = str_to_num(szTokens[17]);
+        g_ePlayerHud[id][HUD_SNIPER_WIDTH]  = clamp(str_to_num(szTokens[16]), 1, 10);
+        g_ePlayerHud[id][HUD_SNIPER_STYLE]  = clamp(str_to_num(szTokens[17]), 0, sizeof(g_szHudSniperStyles) - 1);
         g_ePlayerHud[id][HUD_SNIPER_BLUR]   = str_to_num(szTokens[18]);
         g_ePlayerHud[id][HUD_SNIPER_BOB]    = str_to_num(szTokens[19]);
     }
@@ -804,6 +823,10 @@ stock bool:LoadProfileFromVault(id)
         g_ePlayerHud[id][HUD_RADAR_LOCKED]  = str_to_num(szTokens[21]);
         g_ePlayerHud[id][HUD_RADAR_SCALE]   = str_to_float(szTokens[22]);
         g_ePlayerHud[id][HUD_COLOR_PRESET]  = str_to_num(szTokens[23]);
+    }
+    if (iCount >= 25)
+    {
+        g_ePlayerHud[id][HUD_SNIPER_POSTS]  = clamp(str_to_num(szTokens[24]), 0, 1);
     }
 
     return true;

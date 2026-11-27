@@ -274,6 +274,37 @@ stock LoadCatalogConfig(const filepath[])
     fclose(fp);
 }
 
+stock bool:IsM4A4CatalogEntry(const name[], const v_mdl[], const p_mdl[], const w_mdl[], const snd1[], const snd2[])
+{
+    if (containi(v_mdl, "m4a4") != -1)
+        return true;
+
+    if (containi(v_mdl, "m4a1") != -1)
+        return false;
+
+    if (containi(name, "m4a4") != -1 ||
+        containi(p_mdl, "m4a4") != -1 ||
+        containi(w_mdl, "m4a4") != -1 ||
+        containi(snd1, "m4a4") != -1 ||
+        containi(snd2, "m4a4") != -1)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+stock ExtractPathBasename(const path[], out[], maxlen)
+{
+    new last_slash = -1;
+    for (new i = 0; path[i]; i++)
+    {
+        if (path[i] == '/' || path[i] == '\')
+            last_slash = i;
+    }
+    copy(out, maxlen, path[last_slash + 1]);
+}
+
 stock AddSkinToCatalog(team, weapon_id, const name[], const v_mdl[], const p_mdl[], const w_mdl[], submodel = -1, const snd1[] = "", const snd2[] = "")
 {
     if (weapon_id <= CSW_NONE || weapon_id > CSW_LAST_WEAPON)
@@ -334,7 +365,7 @@ stock AddSkinToCatalog(team, weapon_id, const name[], const v_mdl[], const p_mdl
     // 1. M4A4
     if (weapon_id == CSW_M4A1)
     {
-        if (containi(name, "m4a4") != -1 || containi(v_mdl, "m4a4") != -1)
+        if (IsM4A4CatalogEntry(name, v_mdl, p_mdl, w_mdl, snd1, snd2))
         {
             g_SkinIsM4A4[slot][idx] = true;
 
@@ -389,7 +420,7 @@ stock AddSkinToCatalog(team, weapon_id, const name[], const v_mdl[], const p_mdl
         }
     }
     // 2. Tec-9 (P228 Slot)
-    else if (weapon_id == CSW_P228 && (containi(name, "tec") != -1 || containi(v_mdl, "tec9") != -1))
+    else if (weapon_id == CSW_P228 && (containi(name, "tec9") != -1 || containi(name, "tec-9") != -1 || containi(v_mdl, "tec9") != -1 || containi(v_mdl, "tec-9") != -1))
     {
         if (!g_SkinPModel[slot][idx][0] && (file_exists("models/pw_models/p_tec9.mdl") || file_exists("models/pw_models/p_tec9.mdl", true)))
             copy(g_SkinPModel[slot][idx], charsmax(g_SkinPModel[][]), "models/pw_models/p_tec9.mdl");
@@ -401,8 +432,8 @@ stock AddSkinToCatalog(team, weapon_id, const name[], const v_mdl[], const p_mdl
             g_SkinFireSoundCount[slot][idx] = 1;
         }
     }
-    // 3. CZ75-Auto (TMP or MAC-10 Slot)
-    else if ((weapon_id == CSW_TMP || weapon_id == CSW_MAC10) && (containi(name, "cz") != -1 || containi(v_mdl, "cz75") != -1))
+    // 3. CZ75-Auto (P228 Slot, with legacy TMP/MAC-10 compatibility)
+    else if ((weapon_id == CSW_P228 || weapon_id == CSW_TMP || weapon_id == CSW_MAC10) && (containi(name, "cz75") != -1 || containi(name, "cz-75") != -1 || containi(v_mdl, "cz75") != -1 || containi(v_mdl, "cz-75") != -1))
     {
         if (!g_SkinPModel[slot][idx][0] && (file_exists("models/pw_models/p_cz75.mdl") || file_exists("models/pw_models/p_cz75.mdl", true)))
             copy(g_SkinPModel[slot][idx], charsmax(g_SkinPModel[][]), "models/pw_models/p_cz75.mdl");
@@ -443,7 +474,7 @@ stock AddSkinToCatalog(team, weapon_id, const name[], const v_mdl[], const p_mdl
         }
     }
     // 6. MAG-7 (XM1014 Slot)
-    else if (weapon_id == CSW_XM1014 && (containi(name, "mag") != -1 || containi(v_mdl, "mag7") != -1))
+    else if (weapon_id == CSW_XM1014 && (containi(name, "mag7") != -1 || containi(name, "mag-7") != -1 || containi(v_mdl, "mag7") != -1 || containi(v_mdl, "mag-7") != -1))
     {
         if (!g_SkinPModel[slot][idx][0] && (file_exists("models/pw_models/p_mag7.mdl") || file_exists("models/pw_models/p_mag7.mdl", true)))
             copy(g_SkinPModel[slot][idx], charsmax(g_SkinPModel[][]), "models/pw_models/p_mag7.mdl");
@@ -686,7 +717,12 @@ stock LoadActiveLoadoutConfig(const filepath[])
         if (g_SkinCount[slot] <= 0)
             continue;
 
-        // Find skin matching by model path or display name
+        // Find skin matching by tiered priority: (1) exact path/name, (2) exact model filename, (3) controlled substring
+        new matched_idx = -1;
+        new val_base[64];
+        ExtractPathBasename(val, val_base, charsmax(val_base));
+
+        // Pass 1: Exact path or exact display name match
         for (new s = 0; s < g_SkinCount[slot]; s++)
         {
             new model_norm[128];
@@ -696,15 +732,53 @@ stock LoadActiveLoadoutConfig(const filepath[])
                 if (model_norm[i] == '\') model_norm[i] = '/';
             }
 
-            if (equali(val, model_norm) || containi(model_norm, val) != -1 ||
-                containi(val, model_norm) != -1 || equali(val, g_SkinName[slot][s]) ||
-                containi(g_SkinName[slot][s], val) != -1)
+            if (equali(val, model_norm) || equali(val, g_SkinName[slot][s]))
             {
-                g_ActiveLoadoutSkin[slot] = s;
-                server_print("[CS2 Loadout] Active loadout set: %s [%s] -> %s (index %d)",
-                    (current_team == TEAM_CT_INDEX) ? "CT" : "T", key, g_SkinName[slot][s], s);
+                matched_idx = s;
                 break;
             }
+        }
+
+        // Pass 2: Exact model filename match (e.g. "v_m4a4.mdl")
+        if (matched_idx == -1 && val_base[0])
+        {
+            for (new s = 0; s < g_SkinCount[slot]; s++)
+            {
+                new model_base[64];
+                ExtractPathBasename(g_SkinVModel[slot][s], model_base, charsmax(model_base));
+                if (model_base[0] && equali(val_base, model_base))
+                {
+                    matched_idx = s;
+                    break;
+                }
+            }
+        }
+
+        // Pass 3: Controlled substring fallback (minimum 4 chars to avoid ambiguous short hits)
+        if (matched_idx == -1 && strlen(val) >= 4)
+        {
+            for (new s = 0; s < g_SkinCount[slot]; s++)
+            {
+                new model_norm[128];
+                copy(model_norm, charsmax(model_norm), g_SkinVModel[slot][s]);
+                for (new i = 0; model_norm[i]; i++)
+                {
+                    if (model_norm[i] == '\') model_norm[i] = '/';
+                }
+
+                if (containi(model_norm, val) != -1 || containi(g_SkinName[slot][s], val) != -1)
+                {
+                    matched_idx = s;
+                    break;
+                }
+            }
+        }
+
+        if (matched_idx != -1)
+        {
+            g_ActiveLoadoutSkin[slot] = matched_idx;
+            server_print("[CS2 Loadout] Active loadout set: %s [%s] -> %s (index %d)",
+                (current_team == TEAM_CT_INDEX) ? "CT" : "T", key, g_SkinName[slot][matched_idx], matched_idx);
         }
     }
 

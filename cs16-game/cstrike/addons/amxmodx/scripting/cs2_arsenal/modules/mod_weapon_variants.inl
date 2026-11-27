@@ -35,75 +35,122 @@ stock bool:Arsenal_IsVariantWeaponId(weapon_id)
     }
     return false;
 }
+stock bool:MatchesVariantToken(const text[], const variant_name[])
+{
+    if (!text[0])
+        return false;
+
+    if (variant_name[0])
+    {
+        if (equali(variant_name, "mag") || equali(variant_name, "mag7") || equali(variant_name, "mag-7"))
+            return (containi(text, "mag7") != -1 || containi(text, "mag-7") != -1);
+
+        if (equali(variant_name, "cz") || equali(variant_name, "cz75") || equali(variant_name, "cz-75"))
+            return (containi(text, "cz75") != -1 || containi(text, "cz-75") != -1);
+
+        if (equali(variant_name, "tec") || equali(variant_name, "tec9") || equali(variant_name, "tec-9"))
+            return (containi(text, "tec9") != -1 || containi(text, "tec-9") != -1);
+
+        if (equali(variant_name, "sawed") || equali(variant_name, "sawedoff") || equali(variant_name, "sawed-off"))
+            return (containi(text, "sawed") != -1);
+
+        return (containi(text, variant_name) != -1);
+    }
+
+    return (containi(text, "mag7") != -1 ||
+            containi(text, "mag-7") != -1 ||
+            containi(text, "negev") != -1 ||
+            containi(text, "sawed") != -1 ||
+            containi(text, "bizon") != -1 ||
+            containi(text, "cz75") != -1 ||
+            containi(text, "cz-75") != -1 ||
+            containi(text, "tec9") != -1 ||
+            containi(text, "tec-9") != -1 ||
+            containi(text, "mp7") != -1);
+}
+
 stock bool:IsPlayerUsingVariant(id, weapon_id, const variant_name[] = "")
 {
     if (!is_user_connected(id))
         return false;
 
+    new held_weapon = is_user_alive(id) ? cs_get_user_weapon(id) : CSW_NONE;
     if (weapon_id <= CSW_NONE)
     {
-        weapon_id = cs_get_user_weapon(id);
+        weapon_id = held_weapon;
     }
 
     if (weapon_id <= CSW_NONE || weapon_id > CSW_LAST_WEAPON)
         return false;
 
-    // 1. Inspect player's currently active viewmodel if alive
-    new szVm[128];
-    if (is_user_alive(id))
+    // 1. Inspect player's currently active viewmodel only when holding this weapon_id
+    if (is_user_alive(id) && held_weapon == weapon_id)
     {
+        new szVm[128];
         pev(id, pev_viewmodel2, szVm, charsmax(szVm));
-        if (szVm[0])
+        if (MatchesVariantToken(szVm, variant_name))
+            return true;
+    }
+
+    new team = (id >= 1 && id <= MaxClients) ? get_user_team(id) : 0;
+    new team_index = (team == 2) ? TEAM_CT_INDEX : ((team == 1) ? TEAM_T_INDEX : -1);
+
+    // 2. Check player's currently equipped catalog skin for this slot
+    if (team_index != -1)
+    {
+        new slot = GET_SLOT(team_index, weapon_id);
+        new s_idx = g_iPlayerSkin[id][slot];
+        if (g_SkinCount[slot] > 0 && s_idx >= 0 && s_idx < g_SkinCount[slot])
         {
-            if (variant_name[0])
+            if (MatchesVariantToken(g_SkinVModel[slot][s_idx], variant_name) ||
+                MatchesVariantToken(g_SkinName[slot][s_idx], variant_name))
             {
-                if (containi(szVm, variant_name) != -1)
-                    return true;
-            }
-            else
-            {
-                // Check if current viewmodel matches any known modern variant
-                if (containi(szVm, "mag7") != -1 ||
-                    containi(szVm, "negev") != -1 ||
-                    containi(szVm, "sawed") != -1 ||
-                    containi(szVm, "bizon") != -1 ||
-                    containi(szVm, "cz75") != -1 ||
-                    containi(szVm, "tec9") != -1 ||
-                    containi(szVm, "mp7") != -1)
-                {
-                    return true;
-                }
+                return true;
             }
         }
     }
 
-    // 2. Fallback to active loadout cache by player's team (safe check without relying on pvPrivateData)
-    new team = (id >= 1 && id <= MaxClients && is_user_connected(id)) ? get_user_team(id) : 0;
+    // 3. Fallback to active loadout cache by player's team
     new szLoadoutModel[64];
     if (team == 2)
         copy(szLoadoutModel, charsmax(szLoadoutModel), g_szActiveLoadoutCT[weapon_id]);
     else if (team == 1)
         copy(szLoadoutModel, charsmax(szLoadoutModel), g_szActiveLoadoutT[weapon_id]);
 
-    if (szLoadoutModel[0])
+    return MatchesVariantToken(szLoadoutModel, variant_name);
+}
+
+stock LookupVariantPrice(weapon_id, const szVariant[] = "")
+{
+    if (szVariant[0])
     {
-        if (variant_name[0])
-        {
-            return (containi(szLoadoutModel, variant_name) != -1);
-        }
-        else
-        {
-            return (containi(szLoadoutModel, "mag7") != -1 ||
-                    containi(szLoadoutModel, "negev") != -1 ||
-                    containi(szLoadoutModel, "sawed") != -1 ||
-                    containi(szLoadoutModel, "bizon") != -1 ||
-                    containi(szLoadoutModel, "cz75") != -1 ||
-                    containi(szLoadoutModel, "tec9") != -1 ||
-                    containi(szLoadoutModel, "mp7") != -1);
-        }
+        if (containi(szVariant, "mag7") != -1 || containi(szVariant, "mag-7") != -1 || equali(szVariant, "mag"))
+            return 1300;
+        if (containi(szVariant, "negev") != -1)
+            return 1700;
+        if (containi(szVariant, "sawed") != -1)
+            return 1100;
+        if (containi(szVariant, "bizon") != -1)
+            return 1400;
+        if (containi(szVariant, "cz75") != -1 || containi(szVariant, "cz-75") != -1 || equali(szVariant, "cz"))
+            return 500;
+        if (containi(szVariant, "tec9") != -1 || containi(szVariant, "tec-9") != -1 || equali(szVariant, "tec"))
+            return 500;
+        if (containi(szVariant, "mp7") != -1)
+            return 1500;
     }
 
-    return false;
+    switch (weapon_id)
+    {
+        case CSW_XM1014:         return 1300; // MAG-7
+        case CSW_M249:           return 1700; // Negev
+        case CSW_M3:             return 1100; // Sawed-Off
+        case CSW_P90:            return 1400; // PP-Bizon
+        case CSW_TMP, CSW_MAC10: return 500;  // CZ75-Auto
+        case CSW_P228:           return 500;  // CZ75-Auto / Tec-9
+        case CSW_MP5NAVY:        return 1500; // MP7
+    }
+    return 0;
 }
 
 stock GetVariantInfo(id, weapon_id, szVariantName[], nameLen, &targetPrice, &refundAmount, &targetClip)
@@ -120,11 +167,11 @@ stock GetVariantInfo(id, weapon_id, szVariantName[], nameLen, &targetPrice, &ref
     {
         case CSW_XM1014: // MAG-7
         {
-            if (IsPlayerUsingVariant(id, weapon_id, "mag7") || IsPlayerUsingVariant(id, weapon_id, "mag"))
+            if (IsPlayerUsingVariant(id, weapon_id, "mag7"))
             {
                 copy(szVariantName, nameLen, "MAG-7");
-                targetPrice = 1300;
-                refundAmount = 1700; // XM1014 $3,000 - $1,300
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 3000 - targetPrice; // XM1014 $3,000 - $1,300
                 targetClip = 5;
                 return 1;
             }
@@ -134,19 +181,19 @@ stock GetVariantInfo(id, weapon_id, szVariantName[], nameLen, &targetPrice, &ref
             if (IsPlayerUsingVariant(id, weapon_id, "negev"))
             {
                 copy(szVariantName, nameLen, "Negev");
-                targetPrice = 1700;
-                refundAmount = 4050; // M249 $5,750 - $1,700
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 5750 - targetPrice; // M249 $5,750 - $1,700
                 targetClip = 150;
                 return 1;
             }
         }
         case CSW_M3: // Sawed-Off
         {
-            if (IsPlayerUsingVariant(id, weapon_id, "sawed") || IsPlayerUsingVariant(id, weapon_id, "sawedoff"))
+            if (IsPlayerUsingVariant(id, weapon_id, "sawed"))
             {
                 copy(szVariantName, nameLen, "Sawed-Off");
-                targetPrice = 1100;
-                refundAmount = 600; // M3 $1,700 - $1,100
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 1700 - targetPrice; // M3 $1,700 - $1,100
                 targetClip = 8;
                 return 1;
             }
@@ -156,41 +203,49 @@ stock GetVariantInfo(id, weapon_id, szVariantName[], nameLen, &targetPrice, &ref
             if (IsPlayerUsingVariant(id, weapon_id, "bizon"))
             {
                 copy(szVariantName, nameLen, "PP-Bizon");
-                targetPrice = 1400;
-                refundAmount = 950; // P90 $2,350 - $1,400
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 2350 - targetPrice; // P90 $2,350 - $1,400
                 targetClip = 64;
                 return 1;
             }
         }
-        case CSW_TMP: // CZ75-Auto (CT)
+        case CSW_TMP: // CZ75-Auto (CT legacy)
         {
-            if (IsPlayerUsingVariant(id, weapon_id, "cz") || IsPlayerUsingVariant(id, weapon_id, "cz75"))
+            if (IsPlayerUsingVariant(id, weapon_id, "cz75"))
             {
                 copy(szVariantName, nameLen, "CZ75-Auto");
-                targetPrice = 500;
-                refundAmount = 750; // TMP $1,250 - $500
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 1250 - targetPrice; // TMP $1,250 - $500
                 targetClip = 12;
                 return 1;
             }
         }
-        case CSW_MAC10: // CZ75-Auto (T)
+        case CSW_MAC10: // CZ75-Auto (T legacy)
         {
-            if (IsPlayerUsingVariant(id, weapon_id, "cz") || IsPlayerUsingVariant(id, weapon_id, "cz75"))
+            if (IsPlayerUsingVariant(id, weapon_id, "cz75"))
             {
                 copy(szVariantName, nameLen, "CZ75-Auto");
-                targetPrice = 500;
-                refundAmount = 900; // MAC-10 $1,400 - $500
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 1400 - targetPrice; // MAC-10 $1,400 - $500
                 targetClip = 12;
                 return 1;
             }
         }
-        case CSW_P228: // Tec-9
+        case CSW_P228: // CZ75-Auto / Tec-9
         {
-            if (IsPlayerUsingVariant(id, weapon_id, "tec") || IsPlayerUsingVariant(id, weapon_id, "tec9"))
+            if (IsPlayerUsingVariant(id, weapon_id, "cz75"))
+            {
+                copy(szVariantName, nameLen, "CZ75-Auto");
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 600 - targetPrice; // P228 $600 - $500
+                targetClip = 12;
+                return 1;
+            }
+            if (IsPlayerUsingVariant(id, weapon_id, "tec9"))
             {
                 copy(szVariantName, nameLen, "Tec-9");
-                targetPrice = 500;
-                refundAmount = 100; // P228 $600 - $500
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 600 - targetPrice; // P228 $600 - $500
                 targetClip = 18;
                 return 1;
             }
@@ -200,8 +255,8 @@ stock GetVariantInfo(id, weapon_id, szVariantName[], nameLen, &targetPrice, &ref
             if (IsPlayerUsingVariant(id, weapon_id, "mp7"))
             {
                 copy(szVariantName, nameLen, "MP7");
-                targetPrice = 1500;
-                refundAmount = 0; // MP5NAVY $1,500 - $1,500
+                targetPrice = LookupVariantPrice(weapon_id, szVariantName);
+                refundAmount = 1500 - targetPrice; // MP5NAVY $1,500 - $1,500
                 targetClip = 30;
                 return 1;
             }
@@ -414,9 +469,20 @@ public Arsenal_Variants_DeployPost(iWpn)
                     cs_set_user_bpammo(id, weapon_id, 12);
                 }
             }
-            case CSW_P228: // Tec-9: 18 clip
+            case CSW_P228: // CZ75-Auto (12 clip, 12 reserve) or Tec-9 (18 clip)
             {
-                if (curClip < 18)
+                if (targetClip == 12)
+                {
+                    if (curClip > 12)
+                    {
+                        cs_set_weapon_ammo(iWpn, 12);
+                    }
+                    if (cs_get_user_bpammo(id, CSW_P228) > 12)
+                    {
+                        cs_set_user_bpammo(id, CSW_P228, 12);
+                    }
+                }
+                else if (curClip < 18)
                 {
                     new bp = cs_get_user_bpammo(id, CSW_P228);
                     new need = 18 - curClip;
@@ -548,18 +614,32 @@ public OnVariantPostFrame_Post(iWpn)
                         cs_set_user_bpammo(id, weapon_id, min(12, bp + excess));
                     }
                 }
-                case CSW_P228: // Tec-9: 18
+                case CSW_P228: // CZ75-Auto (12) or Tec-9 (18)
                 {
-                    new cur = cs_get_weapon_ammo(iWpn);
-                    if (cur < 18)
+                    if (targetClip == 12)
                     {
-                        new bp = cs_get_user_bpammo(id, CSW_P228);
-                        new need = 18 - cur;
-                        new add = min(need, bp);
-                        if (add > 0)
+                        new cur = cs_get_weapon_ammo(iWpn);
+                        if (cur > 12)
                         {
-                            cs_set_weapon_ammo(iWpn, cur + add);
-                            cs_set_user_bpammo(id, CSW_P228, bp - add);
+                            new excess = cur - 12;
+                            cs_set_weapon_ammo(iWpn, 12);
+                            new bp = cs_get_user_bpammo(id, CSW_P228);
+                            cs_set_user_bpammo(id, CSW_P228, min(12, bp + excess));
+                        }
+                    }
+                    else
+                    {
+                        new cur = cs_get_weapon_ammo(iWpn);
+                        if (cur < 18)
+                        {
+                            new bp = cs_get_user_bpammo(id, CSW_P228);
+                            new need = 18 - cur;
+                            new add = min(need, bp);
+                            if (add > 0)
+                            {
+                                cs_set_weapon_ammo(iWpn, cur + add);
+                                cs_set_user_bpammo(id, CSW_P228, bp - add);
+                            }
                         }
                     }
                 }
@@ -642,28 +722,7 @@ public native_get_variant_price(numParams)
     new szVariant[32];
     get_string(2, szVariant, charsmax(szVariant));
 
-    if (szVariant[0])
-    {
-        if (containi(szVariant, "mag") != -1)     return 1300;
-        if (containi(szVariant, "negev") != -1)   return 1700;
-        if (containi(szVariant, "sawed") != -1)   return 1100;
-        if (containi(szVariant, "bizon") != -1)   return 1400;
-        if (containi(szVariant, "cz") != -1)      return 500;
-        if (containi(szVariant, "tec") != -1)     return 500;
-        if (containi(szVariant, "mp7") != -1)     return 1500;
-    }
-
-    switch (weapon_id)
-    {
-        case CSW_XM1014: return 1300; // MAG-7
-        case CSW_M249:   return 1700; // Negev
-        case CSW_M3:     return 1100; // Sawed-Off
-        case CSW_P90:    return 1400; // PP-Bizon
-        case CSW_TMP, CSW_MAC10: return 500; // CZ75-Auto
-        case CSW_P228:   return 500;  // Tec-9
-        case CSW_MP5NAVY: return 1500; // MP7
-    }
-    return 0;
+    return LookupVariantPrice(weapon_id, szVariant);
 }
 
 // Public functions for dynamic callfunc interoperability across AMXX modules
@@ -685,26 +744,5 @@ public bool:cs2_get_user_weapon_variant(id, weapon_id, szBuffer[], maxlen)
 
 public cs2_get_variant_price(weapon_id, const szVariant[])
 {
-    if (szVariant[0])
-    {
-        if (containi(szVariant, "mag") != -1)     return 1300;
-        if (containi(szVariant, "negev") != -1)   return 1700;
-        if (containi(szVariant, "sawed") != -1)   return 1100;
-        if (containi(szVariant, "bizon") != -1)   return 1400;
-        if (containi(szVariant, "cz") != -1)      return 500;
-        if (containi(szVariant, "tec") != -1)     return 500;
-        if (containi(szVariant, "mp7") != -1)     return 1500;
-    }
-
-    switch (weapon_id)
-    {
-        case CSW_XM1014: return 1300; // MAG-7
-        case CSW_M249:   return 1700; // Negev
-        case CSW_M3:     return 1100; // Sawed-Off
-        case CSW_P90:    return 1400; // PP-Bizon
-        case CSW_TMP, CSW_MAC10: return 500; // CZ75-Auto
-        case CSW_P228:   return 500;  // Tec-9
-        case CSW_MP5NAVY: return 1500; // MP7
-    }
-    return 0;
+    return LookupVariantPrice(weapon_id, szVariant);
 }

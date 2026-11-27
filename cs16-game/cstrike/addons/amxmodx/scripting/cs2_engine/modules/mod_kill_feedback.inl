@@ -32,6 +32,10 @@ new kf_LastShotFlags[33];
 new kf_LastShotAttacker[33];
 new Float:kf_LastShotTime[33];
 
+// Pre-Shot Sniper Scope Snapshot (keyed by attacker, captured before bolt-action unscope)
+new bool:kf_bShotWasScoped[33];
+new Float:kf_flSniperShotTime[33];
+
 // Bomb Tracking
 new bool:kf_BombPlanted = false;
 
@@ -72,6 +76,8 @@ public Mod_KillFeedback_Init()
     RegisterHam(Ham_Killed, "player", "kf_OnPlayerKilledPost", 1);
     RegisterHam(Ham_TraceAttack, "player", "kf_OnPlayerTraceAttack");
     RegisterHam(Ham_TakeDamage, "player", "kf_OnPlayerTakeDamage");
+    RegisterHam(Ham_Weapon_PrimaryAttack, "weapon_awp", "kf_OnSniperPrimaryAttackPre", 0);
+    RegisterHam(Ham_Weapon_PrimaryAttack, "weapon_scout", "kf_OnSniperPrimaryAttackPre", 0);
 
     // DeathMsg Network Interception for Custom CS2 Weapon Killfeed
     register_message(get_user_msgid("DeathMsg"), "kf_Message_DeathMsg");
@@ -106,6 +112,8 @@ stock kf_ResetPlayerData(id)
     kf_flFlashFadeTime[id] = 0.0;
     kf_iFlashAlpha[id] = 0;
     kf_TempKillFlags[id] = 0;
+    kf_bShotWasScoped[id] = false;
+    kf_flSniperShotTime[id] = 0.0;
 }
 
 public Mod_KillFeedback_PutInServer(id)
@@ -200,6 +208,29 @@ stock bool:kf_IsAttackerBlinded(id, Float:flGameTime)
 }
 
 // -------------------------------------------------------------
+// Pre-Shot Sniper Scope Capture (before CAWP/CScout resets FOV)
+// -------------------------------------------------------------
+public kf_OnSniperPrimaryAttackPre(wpnEnt)
+{
+    if (!get_pcvar_num(pCvar_MasterEnable))
+        return HAM_IGNORED;
+
+    if (pev_valid(wpnEnt) != VALID_PDATA)
+        return HAM_IGNORED;
+
+    new id = get_pdata_cbase(wpnEnt, m_pPlayer, XO_WEAPON);
+    if (id >= 1 && id <= MaxClients && is_user_alive(id))
+    {
+        new Float:fov = 0.0;
+        pev(id, pev_fov, fov);
+        kf_bShotWasScoped[id] = (cs_get_user_zoom(id) > CS_SET_NO_ZOOM || (fov > 0.0 && fov < 90.0));
+        kf_flSniperShotTime[id] = get_gametime();
+    }
+
+    return HAM_IGNORED;
+}
+
+// -------------------------------------------------------------
 // Headshot Dink Sound & Per-Shot Instant Kill Flag Snapshot
 // -------------------------------------------------------------
 public kf_OnPlayerTraceAttack(victim, attacker, Float:damage, Float:direction[3], traceresult, damagebits)
@@ -234,9 +265,17 @@ public kf_OnPlayerTraceAttack(victim, attacker, Float:damage, Float:direction[3]
             shotFlags |= CS2_KILL_BLIND;
         }
 
-        // 3. Noscope (captured before post-fire bolt unscope or quickswitch)
+        // 3. Noscope (bolt-action snipers unscope before FireBullets3, so read pre-shot snapshot)
         new activeWpn = get_user_weapon(attacker);
-        if (activeWpn == CSW_AWP || activeWpn == CSW_SCOUT || activeWpn == CSW_G3SG1 || activeWpn == CSW_SG550)
+        if (activeWpn == CSW_AWP || activeWpn == CSW_SCOUT)
+        {
+            new bool:bWasScoped = (kf_bShotWasScoped[attacker] && (flGameTime - kf_flSniperShotTime[attacker] <= 0.05));
+            if (!bWasScoped)
+            {
+                shotFlags |= CS2_KILL_NOSCOPE;
+            }
+        }
+        else if (activeWpn == CSW_G3SG1 || activeWpn == CSW_SG550)
         {
             new Float:fov = 0.0;
             pev(attacker, pev_fov, fov);

@@ -119,27 +119,17 @@ public Cmd_SelectCZ75Direct(id)
         return PLUGIN_CONTINUE;
 
     new bool:found = false;
-    // CT slot: TMP
-    new ct_slot = GET_SLOT(TEAM_CT_INDEX, CSW_TMP);
-    for (new s = 0; s < g_SkinCount[ct_slot]; s++)
+    for (new t = 0; t < 2; t++)
     {
-        if (containi(g_SkinName[ct_slot][s], "cz") != -1 || containi(g_SkinVModel[ct_slot][s], "cz75") != -1)
+        new slot = GET_SLOT(t, CSW_P228);
+        for (new s = 0; s < g_SkinCount[slot]; s++)
         {
-            SelectWeaponSkin(id, TEAM_CT_INDEX, CSW_TMP, s);
-            found = true;
-            break;
-        }
-    }
-
-    // T slot: MAC-10
-    new t_slot = GET_SLOT(TEAM_T_INDEX, CSW_MAC10);
-    for (new s = 0; s < g_SkinCount[t_slot]; s++)
-    {
-        if (containi(g_SkinName[t_slot][s], "cz") != -1 || containi(g_SkinVModel[t_slot][s], "cz75") != -1)
-        {
-            SelectWeaponSkin(id, TEAM_T_INDEX, CSW_MAC10, s);
-            found = true;
-            break;
+            if (containi(g_SkinName[slot][s], "cz") != -1 || containi(g_SkinVModel[slot][s], "cz75") != -1)
+            {
+                SelectWeaponSkin(id, t, CSW_P228, s);
+                found = true;
+                break;
+            }
         }
     }
 
@@ -298,6 +288,12 @@ public Cmd_ReloadActiveLoadout(id, level, cid)
     if (file_exists(active_config))
     {
         LoadActiveLoadoutConfig(active_config);
+
+        if (g_hVault != INVALID_HANDLE)
+        {
+            nvault_prune(g_hVault, 0, get_systime() + 1);
+        }
+
         for (new i = 1; i <= MaxClients; i++)
         {
             if (is_user_connected(i))
@@ -306,8 +302,66 @@ public Cmd_ReloadActiveLoadout(id, level, cid)
                 {
                     g_iPlayerSkin[i][s] = g_ActiveLoadoutSkin[s];
                 }
+
+                if (!is_user_bot(i))
+                {
+                    for (new t = 0; t < 2; t++)
+                    {
+                        for (new w = 1; w <= CSW_LAST_WEAPON; w++)
+                        {
+                            new slot = GET_SLOT(t, w);
+                            if (g_SkinCount[slot] > 0)
+                            {
+                                SavePlayerWeaponSkin(i, t, w);
+                            }
+                        }
+                    }
+                }
+
                 if (is_user_alive(i))
                 {
+                    new CsTeams:user_team = safe_cs_get_user_team(i);
+                    if (user_team == CS_TEAM_CT || user_team == CS_TEAM_T)
+                    {
+                        new user_team_idx = (user_team == CS_TEAM_CT) ? TEAM_CT_INDEX : TEAM_T_INDEX;
+                        for (new w = 1; w <= CSW_LAST_WEAPON; w++)
+                        {
+                            new slot = GET_SLOT(user_team_idx, w);
+                            if (g_SkinCount[slot] <= 0 || !g_WeaponEntityNames[w][0])
+                                continue;
+
+                            new skin_idx = g_iPlayerSkin[i][slot];
+                            new iWpn = fm_find_weapon_ent_by_owner(i, g_WeaponEntityNames[w]);
+                            if (pev_valid(iWpn))
+                            {
+                                if (w == CSW_M4A1)
+                                {
+                                    if (is_user_bot(i))
+                                    {
+                                        AssignBotM4Loadout(i);
+                                    }
+                                    else
+                                    {
+                                        new bool:is_a4 = g_SkinIsM4A4[slot][skin_idx];
+                                        set_pev(iWpn, pev_iuser1, is_a4 ? 1 : 2);
+                                        if (is_a4 && cs_get_weapon_silen(iWpn))
+                                        {
+                                            cs_set_weapon_silen(iWpn, 0, 0);
+                                        }
+                                        else if (!is_a4 && get_pcvar_num(pCvar_AutoSilenceM4A1) && !cs_get_weapon_silen(iWpn))
+                                        {
+                                            cs_set_weapon_silen(iWpn, 1, 0);
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    set_pev(iWpn, pev_iuser2, skin_idx + 1);
+                                }
+                            }
+                        }
+                    }
+
                     new wid = cs_get_user_weapon(i);
                     if (wid > CSW_NONE && wid <= CSW_LAST_WEAPON)
                     {
@@ -317,9 +371,9 @@ public Cmd_ReloadActiveLoadout(id, level, cid)
             }
         }
         if (id == 0)
-            server_print("[CS2 Loadout] active_loadout.ini reloaded successfully.");
+            server_print("[CS2 Loadout] active_loadout.ini reloaded successfully (nvault overridden).");
         else
-            client_print_color(id, print_team_default, "^4[CS2 Loadout]^1 active_loadout.ini reloaded successfully.");
+            client_print_color(id, print_team_default, "^4[CS2 Loadout]^1 active_loadout.ini reloaded & nvault overridden.");
     }
     else
     {

@@ -225,6 +225,21 @@ stock DrawGunshotDecalsAndEffects(invoker, weapon_id, const Float:angles[3])
     }
 }
 
+stock Float:GetWeaponFireAttenuation(weapon_id)
+{
+    switch (weapon_id)
+    {
+        case CSW_AWP: return 0.28;
+        case CSW_AK47, CSW_GALIL, CSW_SG552, CSW_G3SG1, CSW_SG550: return 0.40;
+        case CSW_M4A1, CSW_FAMAS, CSW_AUG, CSW_M3, CSW_SCOUT: return 0.48;
+        case CSW_XM1014, CSW_M249: return 0.52;
+        case CSW_DEAGLE: return 0.60;
+        case CSW_MP5NAVY, CSW_P90, CSW_UMP45: return 0.64;
+        case CSW_MAC10, CSW_TMP: return 0.72;
+        default: return ATTN_NORM;
+    }
+}
+
 public OnPlaybackEvent_Pre(flags, invoker, eventid, Float:delay, Float:origin[3], Float:angles[3], Float:fparam1, Float:fparam2, iParam1, iParam2, bParam1, bParam2)
 {
     if (!get_pcvar_num(pCvar_Enable) || invoker < 1 || invoker > MaxClients || !is_user_alive(invoker))
@@ -293,7 +308,7 @@ public OnPlaybackEvent_Pre(flags, invoker, eventid, Float:delay, Float:origin[3]
         return FMRES_IGNORED;
 
     // Play custom gunfire sound cleanly without playing default 1.6 event sound!
-    emit_sound(invoker, CHAN_WEAPON, sound_file, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+    emit_sound(invoker, CHAN_WEAPON, sound_file, VOL_NORM, GetWeaponFireAttenuation(weapon_id), 0, PITCH_NORM);
 
     // Provide visual recoil and muzzleflash to invoker and observers
     set_pev(invoker, pev_effects, pev(invoker, pev_effects) | EF_MUZZLEFLASH);
