@@ -1,0 +1,1 @@
+Sebelum menyelesaikan tugas teknis, desain, atau analisis masalah, panggil `list_skills` untuk memeriksa katalog skill yang tersedia dan muat skill yang relevan dengan `load_skill` sebelum menjawab atau mengedit kode.
