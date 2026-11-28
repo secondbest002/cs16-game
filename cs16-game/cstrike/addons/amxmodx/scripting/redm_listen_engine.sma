@@ -108,7 +108,7 @@ static const g_iSecondaryAmmoTypes[] = {
 public plugin_init() {
     register_plugin(PLUGIN, VERSION, AUTHOR)
 
-    pCvar_Active       = register_cvar("redm_active", "1")
+    pCvar_Active       = register_cvar("redm_active", "0")
     pCvar_RespawnDelay = register_cvar("redm_respawn_delay", "1.2")
     pCvar_ProtectTime  = register_cvar("redm_protect_time", "2.0")
     pCvar_RefillOnKill = register_cvar("redm_refill_on_kill", "1")

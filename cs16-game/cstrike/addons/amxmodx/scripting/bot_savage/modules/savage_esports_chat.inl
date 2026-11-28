@@ -79,6 +79,52 @@ bool:Execute_CareZoneCall(id, iZone, const szZoneName[])
 
         PlayTeamAudio(team, (iZone == ZONE_AWP || iZone == ZONE_PUSH) ? "spk radio/takingfire" : "spk radio/spotted");
     }
+
+    // Route / pre-aim up to 2 nearest non-busy teammates toward the danger zone via BP-01 bridge
+    if (!g_bInFreezeTime && !IsKnifeRoundActive() && !IsWarmupActive() && g_bYapbAvailable)
+    {
+        new Float:vecDangerEye[3];
+        xs_vec_copy(g_vecDangerPoint[team], vecDangerEye);
+        vecDangerEye[2] += 36.0;
+
+        new iAssigned = 0;
+        for (new pass = 0; pass < 2 && iAssigned < 2; pass++)
+        {
+            new iBestBot = 0;
+            new Float:flBestDist = 1100.0;
+
+            for (new b = 1; b <= MaxClients; b++)
+            {
+                if (!is_user_alive(b) || !is_user_bot(b) || safe_cs_get_user_team(b) != team)
+                    continue;
+
+                if (!Savage_Bridge_CanRouteMacro(b, false))
+                    continue;
+
+                new Float:vecBotOrigin[3];
+                pev(b, pev_origin, vecBotOrigin);
+                new Float:flDist = get_distance_f(vecBotOrigin, g_vecDangerPoint[team]);
+                if (flDist < flBestDist)
+                {
+                    flBestDist = flDist;
+                    iBestBot = b;
+                }
+            }
+
+            if (iBestBot <= 0)
+                break;
+
+            if (flBestDist <= 550.0)
+            {
+                Savage_Bridge_RequestHold(iBestBot, vecDangerEye, 2.5);
+            }
+            else
+            {
+                Savage_Bridge_RouteMacroGoal(iBestBot, g_vecDangerPoint[team], 3.0, false);
+            }
+            iAssigned++;
+        }
+    }
     return true;
 }
 
@@ -159,7 +205,6 @@ bool:Execute_DropC4Call(id)
 bool:Execute_PopFlashCall(id)
 {
     new CsTeams:team = cs_get_user_team(id);
-    new Float:flGameTime = get_gametime();
     new Float:vecPlayerOrigin[3], Float:vecBotOrigin[3];
     pev(id, pev_origin, vecPlayerOrigin);
 
@@ -191,7 +236,7 @@ bool:Execute_PopFlashCall(id)
         new szBotName[32];
         get_user_name(iBestBot, szBotName, charsmax(szBotName));
 
-        new Float:vecBotEyes[3], Float:vecForward[3], Float:vecVAngle[3], Float:vecTarget[3], Float:vecDiff[3], Float:vecAimAngles[3];
+        new Float:vecBotEyes[3], Float:vecForward[3], Float:vecVAngle[3], Float:vecTarget[3], Float:vecAimPoint[3];
         pev(iBestBot, pev_origin, vecBotEyes);
         vecBotEyes[2] += 17.0;
 
@@ -201,20 +246,14 @@ bool:Execute_PopFlashCall(id)
         xs_vec_add(vecPlayerOrigin, vecForward, vecTarget);
         vecTarget[2] += 180.0; // High popflash apex
 
-        xs_vec_sub(vecTarget, vecBotEyes, vecDiff);
-        vector_to_angle(vecDiff, vecAimAngles);
-        vecAimAngles[0] = -38.0; // Lob pitch
-        ClampAngles(vecAimAngles);
+        Savage_Bridge_ComputeLobAimPoint(vecBotEyes, vecTarget, -38.0, vecAimPoint);
 
-        xs_vec_copy(vecAimAngles, g_vecLineupAngles[iBestBot]);
-        g_bLineupActive[iBestBot] = true;
-        g_flLineupThrowUntil[iBestBot] = flGameTime + 0.45;
-
-        engclient_cmd(iBestBot, "weapon_flashbang");
-
-        BroadcastTeamCall(team, "^4[Utility Support]^3 %s %s^1: Flashing high for you! Turn away!",
-            g_szRoleTags[g_iPlayerRole[iBestBot]], szBotName);
-        PlayTeamAudio(team, "spk radio/fireinhole");
+        if (Savage_Bridge_RequestUtilityThrow(iBestBot, CSW_FLASHBANG, vecAimPoint, 0.65))
+        {
+            BroadcastTeamCall(team, "^4[Utility Support]^3 %s %s^1: Flashing high for you! Turn away!",
+                g_szRoleTags[g_iPlayerRole[iBestBot]], szBotName);
+            PlayTeamAudio(team, "spk radio/fireinhole");
+        }
         return true;
     }
 
@@ -233,7 +272,6 @@ bool:Execute_PopFlashCall(id)
 bool:Execute_SmokeCall(id)
 {
     new CsTeams:team = cs_get_user_team(id);
-    new Float:flGameTime = get_gametime();
     new Float:vecPlayerOrigin[3], Float:vecBotOrigin[3];
     pev(id, pev_origin, vecPlayerOrigin);
 
@@ -265,7 +303,7 @@ bool:Execute_SmokeCall(id)
         new szBotName[32];
         get_user_name(iBestBot, szBotName, charsmax(szBotName));
 
-        new Float:vecBotEyes[3], Float:vecForward[3], Float:vecVAngle[3], Float:vecTarget[3], Float:vecDiff[3], Float:vecAimAngles[3];
+        new Float:vecBotEyes[3], Float:vecForward[3], Float:vecVAngle[3], Float:vecTarget[3], Float:vecAimPoint[3];
         pev(iBestBot, pev_origin, vecBotEyes);
         vecBotEyes[2] += 17.0;
 
@@ -274,20 +312,14 @@ bool:Execute_SmokeCall(id)
         xs_vec_mul_scalar(vecForward, 450.0, vecForward);
         xs_vec_add(vecPlayerOrigin, vecForward, vecTarget);
 
-        xs_vec_sub(vecTarget, vecBotEyes, vecDiff);
-        vector_to_angle(vecDiff, vecAimAngles);
-        vecAimAngles[0] = -28.0;
-        ClampAngles(vecAimAngles);
+        Savage_Bridge_ComputeLobAimPoint(vecBotEyes, vecTarget, -28.0, vecAimPoint);
 
-        xs_vec_copy(vecAimAngles, g_vecLineupAngles[iBestBot]);
-        g_bLineupActive[iBestBot] = true;
-        g_flLineupThrowUntil[iBestBot] = flGameTime + 0.45;
-
-        engclient_cmd(iBestBot, "weapon_smokegrenade");
-
-        BroadcastTeamCall(team, "^4[Utility Support]^3 %s %s^1: Smoking the choke point, 3 seconds!",
-            g_szRoleTags[g_iPlayerRole[iBestBot]], szBotName);
-        PlayTeamAudio(team, "spk radio/roger");
+        if (Savage_Bridge_RequestUtilityThrow(iBestBot, CSW_SMOKEGRENADE, vecAimPoint, 0.65))
+        {
+            BroadcastTeamCall(team, "^4[Utility Support]^3 %s %s^1: Smoking the choke point, 3 seconds!",
+                g_szRoleTags[g_iPlayerRole[iBestBot]], szBotName);
+            PlayTeamAudio(team, "spk radio/roger");
+        }
         return true;
     }
 
@@ -434,22 +466,22 @@ bool:Execute_DefuseCoverCall(id)
 
         if (user_has_weapon(iBestBot, CSW_SMOKEGRENADE))
         {
-            new Float:vecBotEyes[3], Float:vecDiff[3], Float:vecAimAngles[3];
+            new Float:vecBotEyes[3], Float:vecAimPoint[3];
             pev(iBestBot, pev_origin, vecBotEyes);
             vecBotEyes[2] += 17.0;
 
-            xs_vec_sub(vecPlayerOrigin, vecBotEyes, vecDiff);
-            vector_to_angle(vecDiff, vecAimAngles);
-            vecAimAngles[0] = -25.0;
-            ClampAngles(vecAimAngles);
+            Savage_Bridge_ComputeLobAimPoint(vecBotEyes, vecPlayerOrigin, -25.0, vecAimPoint);
 
-            xs_vec_copy(vecAimAngles, g_vecLineupAngles[iBestBot]);
-            g_bLineupActive[iBestBot] = true;
-            g_flLineupThrowUntil[iBestBot] = get_gametime() + 0.45;
-            engclient_cmd(iBestBot, "weapon_smokegrenade");
-
-            BroadcastTeamCall(CS_TEAM_CT, "^4[Objective]^3 %s %s^1: Laying smoke on bomb and covering your defuse!",
-                g_szRoleTags[g_iPlayerRole[iBestBot]], szBotName);
+            if (Savage_Bridge_RequestUtilityThrow(iBestBot, CSW_SMOKEGRENADE, vecAimPoint, 0.65))
+            {
+                BroadcastTeamCall(CS_TEAM_CT, "^4[Objective]^3 %s %s^1: Laying smoke on bomb and covering your defuse!",
+                    g_szRoleTags[g_iPlayerRole[iBestBot]], szBotName);
+            }
+            else
+            {
+                BroadcastTeamCall(CS_TEAM_CT, "^4[Objective]^3 %s %s^1: Covering your defuse!",
+                    g_szRoleTags[g_iPlayerRole[iBestBot]], szBotName);
+            }
         }
         else
         {

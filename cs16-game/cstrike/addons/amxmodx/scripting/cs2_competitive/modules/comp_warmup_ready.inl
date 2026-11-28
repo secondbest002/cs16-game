@@ -79,6 +79,9 @@ public CS_InternalCommand(id, const cmd[])
 // And during warmup DM, immediately strip C4 if player somehow equips it
 public Event_CurWeapon(id)
 {
+    if (!IS_COMPETITIVE_ENABLED())
+        return;
+
     if (g_MatchState == STATE_WARMUP && is_user_alive(id))
     {
         new weapon = read_data(2);
@@ -103,6 +106,8 @@ public Event_CurWeapon(id)
 // Intercept adding C4 to any player/bot during warmup DM and destroy it
 public OnC4AddToPlayer(ent, id)
 {
+    CHECK_COMPETITIVE_ACTIVE(HAM_IGNORED);
+
     if (g_MatchState == STATE_WARMUP)
     {
         ExecuteHamB(Ham_Item_Kill, ent);
@@ -114,6 +119,8 @@ public OnC4AddToPlayer(ent, id)
 // Prevent picking up dropped weapons or C4 during warmup (destroying weaponbox) or any weapons during knife round
 public OnWeaponTouchPre(entity, id)
 {
+    CHECK_COMPETITIVE_ACTIVE(HAM_IGNORED);
+
     if (g_MatchState == STATE_WARMUP)
     {
         static classname[32];
@@ -227,30 +234,46 @@ stock ApplyYaPBState(iState)
         set_cvar_num("yb_botbuy", 0);
         set_cvar_num("yb_csdm_mode", 1);
         set_cvar_num("yb_ignore_objectives", 1);
+        set_cvar_num("yb_camping_allowed", 0);
+        set_cvar_num("yb_tkpunish", 0);
         set_cvar_num("yb_radio_mode", 0);
         set_cvar_num("yb_chat", 0);
         set_cvar_float("yb_think_fps", 40.0);
+        set_cvar_num("yb_stab_close_enemies", 0);
         set_cvar_num("mp_item_staytime", 0);
+        set_cvar_num("mp_friendlyfire", 0);
     }
     else if (iState == STATE_KNIFE_ROUND)
     {
         SetBotKnifeOnly(true);
         set_cvar_num("yb_csdm_mode", 3);
-        set_cvar_num("yb_ignore_objectives", 0);
+        set_cvar_num("yb_ignore_objectives", 1);
+        set_cvar_num("yb_camping_allowed", 0);
+        set_cvar_num("yb_tkpunish", 0);
+        set_cvar_num("yb_user_follow_percent", 0);
+        set_cvar_num("yb_user_max_followers", 0);
         set_cvar_num("yb_radio_mode", 0);
         set_cvar_num("yb_chat", 0);
         set_cvar_float("yb_think_fps", 60.0);
+        set_cvar_num("yb_stab_close_enemies", 1);
         set_cvar_num("mp_item_staytime", 300);
+        set_cvar_num("mp_friendlyfire", 0);
     }
     else
     {
         SetBotKnifeOnly(false);
         set_cvar_num("yb_csdm_mode", 3);
         set_cvar_num("yb_ignore_objectives", 0);
+        set_cvar_num("yb_camping_allowed", 0);
+        set_cvar_num("yb_tkpunish", 0);
+        set_cvar_num("yb_user_follow_percent", 10);
+        set_cvar_num("yb_user_max_followers", 1);
         set_cvar_num("yb_radio_mode", 2);
         set_cvar_num("yb_chat", 1);
         set_cvar_float("yb_think_fps", 60.0);
+        set_cvar_num("yb_stab_close_enemies", 0);
         set_cvar_num("mp_item_staytime", 300);
+        set_cvar_num("mp_friendlyfire", 1);
     }
 }
 

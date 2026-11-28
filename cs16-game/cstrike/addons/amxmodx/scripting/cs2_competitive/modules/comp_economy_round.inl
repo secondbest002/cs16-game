@@ -8,22 +8,34 @@
 // ========================================================================
 public Event_GameRestart()
 {
+    if (!IS_COMPETITIVE_ENABLED())
+        return;
+
     g_TimeoutQueuedCT = false;
     g_TimeoutQueuedT = false;
     g_IsTimeoutActive = false;
     set_cvar_num("amx_csgo_is_timeout", 0);
     remove_task(TASK_COMP_TIMEOUT);
 
-    if (g_MatchState != STATE_WARMUP)
+    if (g_MatchState != STATE_WARMUP && g_MatchState != STATE_KNIFE_ROUND)
     {
         new freeze = get_pcvar_num(pCvar_FreezeTime);
         if (freeze <= 0) freeze = 20;
         set_cvar_num("mp_freezetime", freeze);
     }
+
+    if (IsLiveMatchState() || g_MatchState == STATE_HALFTIME || g_MatchState == STATE_OVERTIME_HALFTIME)
+    {
+        remove_task(TASK_COMP_SYNC_TELEMETRY);
+        set_task(1.5, "Task_SyncTelemetryPostRestart", TASK_COMP_SYNC_TELEMETRY);
+    }
 }
 
 public Event_FreezeTimeStart()
 {
+    if (!IS_COMPETITIVE_ENABLED())
+        return;
+
     if (g_MatchState == STATE_WARMUP)
     {
         g_bInFreezePeriod = false;
@@ -31,17 +43,6 @@ public Event_FreezeTimeStart()
     }
 
     g_bInFreezePeriod = true;
-
-    // Freeze all bots in spawn alongside human players during freeze time
-    for (new i = 1; i <= MaxClients; i++)
-    {
-        if (is_user_alive(i) && is_user_bot(i))
-        {
-            new flags = pev(i, pev_flags);
-            set_pev(i, pev_flags, flags | FL_FROZEN);
-            set_pev(i, pev_velocity, Float:{0.0, 0.0, 0.0});
-        }
-    }
 
     // Check if Tactical Timeout was queued for this round
     if (g_TimeoutQueuedCT)
@@ -63,8 +64,8 @@ public LogEvent_RoundStart()
 
     g_bInFreezePeriod = false;
 
-    // Restore standard freeze time for subsequent rounds
-    if (g_MatchState != STATE_WARMUP)
+    // Restore standard freeze time for subsequent live rounds (preserve 3s during Knife Round)
+    if (g_MatchState != STATE_WARMUP && g_MatchState != STATE_KNIFE_ROUND)
     {
         new freeze = get_pcvar_num(pCvar_FreezeTime);
         if (freeze <= 0) freeze = 20;
@@ -129,6 +130,7 @@ public LogEvent_RoundStart()
     }
     g_BombPlanter = 0;
     g_BombDefuser = 0;
+    g_PendingWinReason = WIN_REASON_NONE;
 
     // Apply CS:GO Loss Bonus notification & adjustment
     if (g_MatchState == STATE_LIVE_HALF_1 || g_MatchState == STATE_LIVE_HALF_2)
@@ -154,6 +156,11 @@ public LogEvent_RoundEnd()
 
     // Announce MVP
     AnnounceMVP();
+
+    if (IsLiveMatchState() || g_MatchState == STATE_FINISHED)
+    {
+        BroadcastCS2PlayerStats(0);
+    }
 
     // Prepare Tactical Timeout for next round if queued
     if (g_TimeoutQueuedCT || g_TimeoutQueuedT)
@@ -184,6 +191,55 @@ public Event_TWin()
 {
     g_BombPlanted = false;
     HandleRoundWin(CS_TEAM_T);
+}
+
+public Event_WinReasonTime()
+{
+    if (!IS_COMPETITIVE_ENABLED()) return;
+    RecordOrPatchWinReason(WIN_REASON_TIME);
+}
+
+public Event_WinReasonBomb()
+{
+    if (!IS_COMPETITIVE_ENABLED()) return;
+    RecordOrPatchWinReason(WIN_REASON_BOMB);
+}
+
+public Event_WinReasonDefuse()
+{
+    if (!IS_COMPETITIVE_ENABLED()) return;
+    RecordOrPatchWinReason(WIN_REASON_DEFUSE);
+}
+
+stock RecordOrPatchWinReason(reason)
+{
+    g_PendingWinReason = reason;
+    if (g_RoundHistCount > 0 && (get_gametime() - g_LastRoundWinTime) <= 0.25 &&
+        g_RoundHistReason[g_RoundHistCount - 1] == WIN_REASON_ELIM)
+    {
+        g_RoundHistReason[g_RoundHistCount - 1] = reason;
+        BroadcastCS2RoundHistory(0);
+    }
+}
+
+stock RecordRoundHistoryEntry(CsTeams:winning_team)
+{
+    new reason = g_PendingWinReason;
+    if (reason == WIN_REASON_NONE)
+    {
+        reason = (g_BombDefuser > 0) ? WIN_REASON_DEFUSE : WIN_REASON_ELIM;
+    }
+
+    if (g_RoundHistCount < MAX_ROUND_HISTORY)
+    {
+        g_RoundHistWinner[g_RoundHistCount] = (winning_team == CS_TEAM_CT) ? 1 : 2;
+        g_RoundHistReason[g_RoundHistCount] = reason;
+        g_RoundHistCount++;
+    }
+
+    g_LastRoundWinTime = get_gametime();
+    g_PendingWinReason = WIN_REASON_NONE;
+    BroadcastCS2RoundHistory(0);
 }
 
 public Event_RoundDraw()
@@ -261,6 +317,8 @@ public HandleRoundWin(CsTeams:winning_team)
             }
         }
 
+        RecordRoundHistoryEntry(winning_team);
+
         // Check Regulation Win Conditions
         if (g_ScoreCT >= g_TargetWinScore)
         {
@@ -293,6 +351,8 @@ public HandleRoundWin(CsTeams:winning_team)
         set_pcvar_num(pCvar_CurrentRound, (g_MaxRoundsHalf * 2) + g_OTRoundNumber + 1);
         if (winning_team == CS_TEAM_CT) g_ScoreCT++;
         else if (winning_team == CS_TEAM_T) g_ScoreT++;
+
+        RecordRoundHistoryEntry(winning_team);
 
         if (g_ScoreCT >= g_OTTargetWinScore)
         {
@@ -419,14 +479,6 @@ public OnPlayerSpawnPost(id)
         set_task(0.1, "Task_StripToKnife", TASK_COMP_STRIPKNIFE + id);
     }
 
-    // Freeze bots during freeze time in live match & knife round
-    if (g_MatchState != STATE_WARMUP && g_bInFreezePeriod && is_user_bot(id))
-    {
-        new flags = pev(id, pev_flags);
-        set_pev(id, pev_flags, flags | FL_FROZEN);
-        set_pev(id, pev_velocity, Float:{0.0, 0.0, 0.0});
-    }
-
     return HAM_IGNORED;
 }
 
@@ -475,6 +527,26 @@ public OnPlayerKilledPost(victim, attacker, shouldgib)
         {
             g_KillsInRound[attacker]++;
         }
+
+        new best_assister = 0;
+        new best_assist_dmg = 39;
+        for (new i = 1; i <= MaxClients; i++)
+        {
+            if (i != attacker && i != victim && is_user_connected(i) &&
+                safe_cs_get_user_team(i) != safe_cs_get_user_team(victim) &&
+                g_DamageDealt[i][victim] > best_assist_dmg)
+            {
+                best_assist_dmg = g_DamageDealt[i][victim];
+                best_assister = i;
+            }
+        }
+
+        if (best_assister > 0)
+        {
+            g_PlayerAssists[best_assister]++;
+        }
+
+        BroadcastCS2PlayerStats(0);
     }
 
     return HAM_IGNORED;
@@ -647,6 +719,8 @@ public Msg_RoundTime(msg_id, msg_dest, msg_entity)
 
 public OnTakeDamagePost(victim, inflictor, attacker, Float:damage, damagebits)
 {
+    CHECK_COMPETITIVE_ACTIVE(HAM_IGNORED);
+
     if (attacker < 1 || attacker > MaxClients || victim < 1 || victim > MaxClients || attacker == victim)
         return HAM_IGNORED;
 
@@ -655,8 +729,13 @@ public OnTakeDamagePost(victim, inflictor, attacker, Float:damage, damagebits)
 
     if (safe_cs_get_user_team(attacker) != safe_cs_get_user_team(victim))
     {
-        g_DamageDealt[attacker][victim] += floatround(damage);
+        new dmg = floatround(damage);
+        g_DamageDealt[attacker][victim] += dmg;
         g_HitsDealt[attacker][victim]++;
+        if (dmg > 0 && IsLiveMatchState())
+        {
+            g_TotalMatchDamage[attacker] += dmg;
+        }
     }
 
     return HAM_IGNORED;
@@ -664,7 +743,7 @@ public OnTakeDamagePost(victim, inflictor, attacker, Float:damage, damagebits)
 
 public LogEvent_Plant()
 {
-    if (g_MatchState == STATE_WARMUP)
+    if (!IS_COMPETITIVE_ENABLED() || g_MatchState == STATE_WARMUP)
         return;
 
     new loguser[80], name[32];
@@ -691,9 +770,13 @@ public LogEvent_Defuse()
     g_BombDefuser = get_user_index(name);
 
     g_BombPlanted = false;
+    if (IS_COMPETITIVE_ENABLED())
+        RecordOrPatchWinReason(WIN_REASON_DEFUSE);
 }
 
 public LogEvent_TargetBombed()
 {
     g_BombPlanted = false;
+    if (IS_COMPETITIVE_ENABLED())
+        RecordOrPatchWinReason(WIN_REASON_BOMB);
 }

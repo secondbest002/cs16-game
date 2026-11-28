@@ -15,7 +15,9 @@
 #define TASK_SV_MID_SCAN       30009
 #define TASK_SV_CALL_T         30010
 #define TASK_SV_CALL_CT        30011
+#define TASK_SV_HAZARD_SCAN    30012
+#define TASK_SV_MOLOTOV_SCAN   30013
+#define TASK_SV_RETAKE_SYNC    30014
 
 #define TASK_SV_ROLE_MENU      31000 // + player id
-#define TASK_SV_SPAWN_EQUIP    31100 // + player id
 #define TASK_SV_REFILL_AMMO    31200 // + player id

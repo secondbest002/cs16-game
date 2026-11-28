@@ -133,7 +133,6 @@ new Float:g_vecBombsiteA[3];
 new Float:g_vecBombsiteB[3];
 new bool:g_bBombsitesFound = false;
 new Float:g_flLineupThrowUntil[33];
-new Float:g_vecLineupAngles[33][3];
 new bool:g_bLineupActive[33];
 
 // Saved Weapon & Role Delivery State Tracking
@@ -194,3 +193,27 @@ new Float:g_flDoublePeekExpire[33];
 // Tactical Callout Cooldowns
 new Float:g_flNextContactCall[CsTeams];
 new Float:g_flNextBombCall[CsTeams];
+new Float:g_flNextTeamMolotovTime[CsTeams];
+
+// YaPB <-> AMXX Action Lease Arbitration Bridge (BP-01)
+enum SavageLeaseType
+{
+    LEASE_NONE = 0,
+    LEASE_TACTICAL_HOLD = 1,
+    LEASE_UTILITY_THROW = 2,
+    LEASE_HAZARD_EVADE = 3
+};
+
+new bool:g_bYapbAvailable = false;
+new SavageLeaseType:g_iBotLeaseType[33];
+new Float:g_flBotLeaseUntil[33];
+new Float:g_flBotLeaseStart[33];
+new Float:g_vecBotLeaseTarget[33][3];
+new g_iBotLeaseWeaponCSW[33];
+new bool:g_bBotLeaseAttackSent[33];
+new Float:g_flNextKnifeGoalPush[33];
+new Float:g_flNextMacroGoalPush[33];
+new bool:g_bBombPlantedActive = false;
+new bool:g_bRetakeUtilThrown = false;
+new Float:g_vecPlantedC4Origin[3];
+new g_iRetakeSyncTicks = 0;

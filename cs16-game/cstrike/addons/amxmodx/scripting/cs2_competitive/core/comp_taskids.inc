@@ -14,9 +14,11 @@
 #define TASK_COMP_SWEEP2      50008
 #define TASK_COMP_HALF2       50009
 #define TASK_COMP_OT2         50010
-#define TASK_COMP_DRAW_KNIFE  50011
-#define TASK_COMP_AUTOPICK    50012
+#define TASK_COMP_DRAW_KNIFE      50011
+#define TASK_COMP_AUTOPICK        50012
+#define TASK_COMP_SYNC_TELEMETRY  50013
 
 #define TASK_COMP_RESPAWN     50100 // + player id
 #define TASK_COMP_BOTEQUIP    50200 // + player id
 #define TASK_COMP_STRIPKNIFE  50300 // + player id
+#define TASK_COMP_CLIENT_SYNC 50400 // + player id

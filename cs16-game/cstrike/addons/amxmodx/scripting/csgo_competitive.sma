@@ -18,6 +18,12 @@
 #include "cs2_competitive/modules/comp_economy_round.inl"
 #include "cs2_competitive/modules/comp_dmg_mvp_hud.inl"
 
+public plugin_precache()
+{
+    g_MsgPlayerStats = engfunc(EngFunc_RegUserMsg, "CS2PlayerStats", -1);
+    g_MsgRoundHist   = engfunc(EngFunc_RegUserMsg, "CS2RoundHist", -1);
+}
+
 public plugin_natives()
 {
     set_native_filter("cs2_sdk_native_filter");
@@ -51,6 +57,8 @@ public plugin_init()
     register_cvar("amx_csgo_is_warmup", "1"); // Signal whether Warmup DM is currently active
     register_cvar("amx_csgo_is_timeout", "0"); // Signal whether Tactical Timeout is currently active
     register_message(get_user_msgid("RoundTime"), "Msg_RoundTime");
+    if (!g_MsgPlayerStats) g_MsgPlayerStats = get_user_msgid("CS2PlayerStats");
+    if (!g_MsgRoundHist)   g_MsgRoundHist   = get_user_msgid("CS2RoundHist");
 
     // Chat & Console Commands
     register_clcmd("say", "HandleSay");
@@ -91,6 +99,9 @@ public plugin_init()
     // Game Events
     register_event("HLTV", "Event_FreezeTimeStart", "a", "1=0", "2=0");
     register_event("TextMsg", "Event_GameRestart", "a", "2=#Game_will_restart_in", "2=#Game_Commencing");
+    register_event("TextMsg", "Event_WinReasonTime", "a", "2=#Target_Saved", "2=#Hostages_Not_Rescued");
+    register_event("TextMsg", "Event_WinReasonBomb", "a", "2=#Target_Bombed");
+    register_event("TextMsg", "Event_WinReasonDefuse", "a", "2=#Bomb_Defused", "2=#All_Hostages_Rescued");
     register_event("CurWeapon", "Event_CurWeapon", "be", "1=1");
     register_event("SendAudio", "Event_TWin", "a", "2=%!MRAD_terwin");
     register_event("SendAudio", "Event_CTWin", "a", "2=%!MRAD_ctwin");
@@ -160,12 +171,15 @@ stock SyncCompetitiveLifecycle(bool:bEnable)
         remove_task(TASK_COMP_OT2);
         remove_task(TASK_COMP_DRAW_KNIFE);
         remove_task(TASK_COMP_AUTOPICK);
+        remove_task(TASK_COMP_MATCH_END);
+        remove_task(TASK_COMP_SYNC_TELEMETRY);
 
         for (new i = 1; i <= MaxClients; i++)
         {
             remove_task(i + TASK_COMP_RESPAWN);
             remove_task(i + TASK_COMP_BOTEQUIP);
             remove_task(i + TASK_COMP_STRIPKNIFE);
+            remove_task(i + TASK_COMP_CLIENT_SYNC);
             g_bEquippingBot[i] = false;
             g_iBotEquipRetries[i] = 0;
         }
@@ -173,6 +187,9 @@ stock SyncCompetitiveLifecycle(bool:bEnable)
         // Hapus HUD pesan agar layar bersih seketika (menghilangkan banner .ready dan timer 55 menit)
         ShowSyncHudMsg(0, g_HudSyncHeader, "");
         ShowSyncHudMsg(0, g_HudSyncSubHeader, "");
+        ResetMatchTelemetry();
+        BroadcastCS2PlayerStats(0, true);
+        BroadcastCS2RoundHistory(0, true);
 
         log_amx("[CSGO-COMP] Mode Competitive dinonaktifkan (amx_csgo_mode 0). Seluruh hook dan task telah dibekukan.");
     }
@@ -237,7 +254,16 @@ public client_putinserver(id)
     g_PlayerReady[id] = false;
     g_bEquippingBot[id] = false;
     g_iBotEquipRetries[id] = 0;
+    g_PlayerAssists[id] = 0;
+    g_PlayerMVPs[id] = 0;
+    g_TotalMatchDamage[id] = 0;
     ResetPlayerDamage(id);
+
+    if (!is_user_bot(id))
+    {
+        remove_task(id + TASK_COMP_CLIENT_SYNC);
+        set_task(1.0, "Task_SyncClientTelemetry", id + TASK_COMP_CLIENT_SYNC);
+    }
 }
 
 public client_disconnected(id)
@@ -245,10 +271,14 @@ public client_disconnected(id)
     g_PlayerReady[id] = false;
     g_bEquippingBot[id] = false;
     g_iBotEquipRetries[id] = 0;
+    g_PlayerAssists[id] = 0;
+    g_PlayerMVPs[id] = 0;
+    g_TotalMatchDamage[id] = 0;
     ResetPlayerDamage(id);
     remove_task(id + TASK_COMP_RESPAWN);
     remove_task(id + TASK_COMP_BOTEQUIP);
     remove_task(id + TASK_COMP_STRIPKNIFE);
+    remove_task(id + TASK_COMP_CLIENT_SYNC);
 }
 
 

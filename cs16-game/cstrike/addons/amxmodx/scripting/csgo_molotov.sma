@@ -5,6 +5,7 @@
 #include <hamsandwich>
 #include <fun>
 #include <cs2_sdk/cs2_offsets>
+#include <cs2_sdk/cs2_api>
 
 #define PLUGIN           "CS:GO Molotov"
 #define MOLOTOV_VERSION  "2.5.12"
@@ -15,6 +16,7 @@
 
 #define ENT_FIRE		pev_iuser3
 #define THINK_COUNT		pev_iuser4
+#define MAX_ACTIVE_MOLOTOVS 16
 
 enum { ViewModel, PlayerModel, WorldModel, WorldModelBroken }
 new const models[][] = {
@@ -40,6 +42,9 @@ new const commandBuy[][] = { "say /molotov", "say_team /molotov", "say /m", "say
 
 new molotovEnabled, molotovPrice, molotov, mapBuyBlock, fireSprite, smokeSprite[2], bool:restarted,
 	Float:molotovRadius, Float:molotovFireTime, Float:molotovFireDamage, Float:gameTime;
+
+new g_iActiveMolotovEnts[MAX_ACTIVE_MOLOTOVS];
+new g_iActiveMolotovCount = 0;
 
 public plugin_init()
 {
@@ -70,7 +75,12 @@ public plugin_init()
 public plugin_natives()
 {
 	register_library("csgo_molotov");
+	set_native_filter("cs2_sdk_native_filter");
 	register_native("csgo_get_user_molotov", "_csgo_get_user_molotov", 1);
+	register_native("csgo_give_user_molotov", "_csgo_give_user_molotov", 1);
+	register_native("csgo_clear_user_molotov", "_csgo_clear_user_molotov", 1);
+	register_native("csgo_get_active_molotov_count", "_csgo_get_active_molotov_count");
+	register_native("csgo_get_active_molotov", "_csgo_get_active_molotov");
 }
 
 public plugin_precache()
@@ -253,6 +263,9 @@ public molotov_deploy_model(weapon)
 
 public player_spawned(id)
 {
+	if (is_user_bot(id) && cs2_api_has_savage_ai())
+		return;
+
 	if (!cs2_get_bit(id, molotov))
 	{
 		if (is_user_bot(id))
@@ -373,6 +386,8 @@ stock molotov_explode(entMolotov)
 	set_pev(entMolotov, ENT_FIRE, entFire);
 	set_pev(entMolotov, THINK_COUNT, floatround(molotovFireTime / 0.1, floatround_floor) - 1);
 
+	RegisterActiveMolotov(entMolotov);
+
 	if (extinguish_molotov(entMolotov)) return;
 
 	emit_sound(entMolotov, CHAN_AUTO, sounds[Explode], VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
@@ -413,6 +428,8 @@ public think_molotov(entMolotov)
 
 public fire_stop(entMolotov)
 {
+	UnregisterActiveMolotov(entMolotov);
+
 	if (pev_valid(entMolotov)) {
 		new entFire = pev(entMolotov, ENT_FIRE);
 
@@ -438,10 +455,6 @@ stock radius_damage2(attacker, team, Float:origin[3], Float:damage, Float:range)
 		if (distance > range) continue;
 
 		tempDamange = damage;
-
-		// Bot safety: scale down self-damage so bots don't commit suicide from their own throws
-		if (attacker == i && is_user_bot(i))
-			tempDamange *= 0.35;
 
 		if (pev(i, pev_health) <= tempDamange) kill(attacker, i, team);
 		else fm_fakedamage(i, molotovClassName, tempDamange, DMG_BURN);
@@ -658,6 +671,8 @@ stock remove_molotovs(id = 0)
 
 		ent = find_ent_by_class(ent, molotovClassName);
 	}
+
+	PruneActiveMolotovs();
 }
 
 stock Float:distance_to_floor(Float:start[3], ignoremonsters = 1)
@@ -677,5 +692,145 @@ stock Float:distance_to_floor(Float:start[3], ignoremonsters = 1)
 }
 
 
+stock RegisterActiveMolotov(entMolotov)
+{
+	PruneActiveMolotovs();
+
+	for (new i = 0; i < g_iActiveMolotovCount; i++)
+	{
+		if (g_iActiveMolotovEnts[i] == entMolotov)
+			return;
+	}
+
+	if (g_iActiveMolotovCount >= MAX_ACTIVE_MOLOTOVS)
+	{
+		for (new i = 1; i < MAX_ACTIVE_MOLOTOVS; i++)
+		{
+			g_iActiveMolotovEnts[i - 1] = g_iActiveMolotovEnts[i];
+		}
+		g_iActiveMolotovCount = MAX_ACTIVE_MOLOTOVS - 1;
+	}
+
+	g_iActiveMolotovEnts[g_iActiveMolotovCount++] = entMolotov;
+}
+
+stock UnregisterActiveMolotov(entMolotov)
+{
+	for (new i = 0; i < g_iActiveMolotovCount; i++)
+	{
+		if (g_iActiveMolotovEnts[i] == entMolotov)
+		{
+			for (new j = i + 1; j < g_iActiveMolotovCount; j++)
+			{
+				g_iActiveMolotovEnts[j - 1] = g_iActiveMolotovEnts[j];
+			}
+			g_iActiveMolotovCount--;
+			g_iActiveMolotovEnts[g_iActiveMolotovCount] = 0;
+			return;
+		}
+	}
+}
+
+stock PruneActiveMolotovs()
+{
+	new writeIdx = 0;
+	for (new i = 0; i < g_iActiveMolotovCount; i++)
+	{
+		new ent = g_iActiveMolotovEnts[i];
+		if (pev_valid(ent) && !(pev(ent, pev_flags) & FL_KILLME) && pev(ent, THINK_COUNT) > 0)
+		{
+			g_iActiveMolotovEnts[writeIdx++] = ent;
+		}
+	}
+
+	for (new i = writeIdx; i < g_iActiveMolotovCount; i++)
+	{
+		g_iActiveMolotovEnts[i] = 0;
+	}
+	g_iActiveMolotovCount = writeIdx;
+}
+
 public _csgo_get_user_molotov(id)
 	return cs2_get_bit(id, molotov);
+
+public bool:_csgo_give_user_molotov(id, bool:bDeductMoney)
+{
+	if (!molotovEnabled || !is_user_alive(id))
+		return false;
+
+	if (cs2_get_bit(id, molotov))
+		return true;
+
+	if (bDeductMoney)
+	{
+		new money = cs_get_user_money(id);
+		if (money < molotovPrice)
+			return false;
+
+		cs_set_user_money(id, money - molotovPrice);
+	}
+
+	cs2_set_bit(id, molotov);
+
+	if (!user_has_weapon(id, CSW_HEGRENADE))
+	{
+		give_item(id, molotovWeaponName);
+	}
+	cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+
+	if (get_user_weapon(id) == CSW_HEGRENADE)
+	{
+		new ent = fm_find_ent_by_owner(-1, molotovWeaponName, id);
+		if (pev_valid(ent))
+		{
+			ExecuteHamB(Ham_Item_Deploy, ent);
+		}
+	}
+
+	return true;
+}
+
+public _csgo_clear_user_molotov(id)
+{
+	if (1 <= id <= MAX_PLAYERS)
+	{
+		cs2_rem_bit(id, molotov);
+	}
+	return 1;
+}
+
+public _csgo_get_active_molotov_count(plugin_id, num_params)
+{
+	PruneActiveMolotovs();
+	return g_iActiveMolotovCount;
+}
+
+public bool:_csgo_get_active_molotov(plugin_id, num_params)
+{
+	PruneActiveMolotovs();
+
+	new index = get_param(1);
+	if (index < 0 || index >= g_iActiveMolotovCount)
+		return false;
+
+	new ent = g_iActiveMolotovEnts[index];
+	if (!pev_valid(ent) || (pev(ent, pev_flags) & FL_KILLME))
+		return false;
+
+	new iThinkCount = pev(ent, THINK_COUNT);
+	if (iThinkCount <= 0)
+		return false;
+
+	new Float:vecOrigin[3];
+	pev(ent, pev_origin, vecOrigin);
+
+	new Float:flRemTime = float(iThinkCount) * 0.1;
+	new iTeam = pev(ent, pev_team);
+
+	set_array_f(2, vecOrigin, 3);
+	set_param_byref(3, _:molotovRadius);
+	set_param_byref(4, iTeam);
+	set_param_byref(5, _:flRemTime);
+
+	return true;
+}

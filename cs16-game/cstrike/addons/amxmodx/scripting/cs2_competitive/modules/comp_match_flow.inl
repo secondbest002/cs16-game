@@ -15,6 +15,9 @@ public StartLiveMatch()
     remove_task(TASK_COMP_SWEEP2);
     remove_task(TASK_COMP_COUNTDOWN);
     remove_task(TASK_COMP_SIDEPICK);
+    remove_task(TASK_COMP_MATCH_END);
+
+    ResetMatchTelemetry();
 
     g_MatchState = STATE_LIVE_HALF_1;
     g_RoundNumber = 0;
@@ -61,6 +64,8 @@ public StartLiveMatch()
     }
 
     set_cvar_num("sv_restart", 1);
+    remove_task(TASK_COMP_SYNC_TELEMETRY);
+    set_task(1.5, "Task_SyncTelemetryPostRestart", TASK_COMP_SYNC_TELEMETRY);
 
     // Visual Announcement (DHUD & Screen Flash)
     set_dhudmessage(255, 215, 0, -1.0, 0.28, 2, 0.1, 4.5, 0.1, 1.0);
@@ -89,6 +94,14 @@ public TriggerHalftime()
     new temp_score = g_ScoreCT;
     g_ScoreCT = g_ScoreT;
     g_ScoreT = temp_score;
+
+    // Flip recorded round history sides (1 <-> 2)
+    for (new r = 0; r < g_RoundHistCount; r++)
+    {
+        if (g_RoundHistWinner[r] == 1)      g_RoundHistWinner[r] = 2;
+        else if (g_RoundHistWinner[r] == 2) g_RoundHistWinner[r] = 1;
+    }
+    BroadcastCS2RoundHistory(0);
 
     client_print(0, print_chat, "^x04==================================================");
     client_print(0, print_chat, "^x04[CS:GO Match] HALFTIME! Switching Sides (CT <-> T)");
@@ -146,6 +159,8 @@ public Task_RestartSecondHalf()
     g_MatchState = STATE_LIVE_HALF_2;
     set_pcvar_num(pCvar_CurrentRound, g_MaxRoundsHalf + 1);
     set_cvar_num("sv_restart", 1);
+    remove_task(TASK_COMP_SYNC_TELEMETRY);
+    set_task(1.5, "Task_SyncTelemetryPostRestart", TASK_COMP_SYNC_TELEMETRY);
 
     set_dhudmessage(100, 255, 120, -1.0, 0.28, 2, 0.1, 3.5, 0.1, 1.0);
     show_dhudmessage(0, "★ SECOND HALF IS LIVE ★^nGood luck, have fun!");
@@ -197,6 +212,8 @@ public TriggerOvertime()
     client_print(0, print_chat, "^x04==================================================");
 
     set_cvar_num("sv_restart", 1);
+    remove_task(TASK_COMP_SYNC_TELEMETRY);
+    set_task(1.5, "Task_SyncTelemetryPostRestart", TASK_COMP_SYNC_TELEMETRY);
 }
 
 public TriggerOTHalftime()
@@ -207,6 +224,14 @@ public TriggerOTHalftime()
     new temp_score = g_ScoreCT;
     g_ScoreCT = g_ScoreT;
     g_ScoreT = temp_score;
+
+    // Flip recorded round history sides (1 <-> 2)
+    for (new r = 0; r < g_RoundHistCount; r++)
+    {
+        if (g_RoundHistWinner[r] == 1)      g_RoundHistWinner[r] = 2;
+        else if (g_RoundHistWinner[r] == 2) g_RoundHistWinner[r] = 1;
+    }
+    BroadcastCS2RoundHistory(0);
 
     set_dhudmessage(255, 255, 100, -1.0, 0.30, 2, 0.1, 3.0, 0.1, 0.8);
     show_dhudmessage(0, "★ OVERTIME HALFTIME ★^nSWITCHING SIDES...");
@@ -239,6 +264,8 @@ public Task_RestartOTSecondHalf()
 {
     g_MatchState = STATE_OVERTIME_2;
     set_cvar_num("sv_restart", 1);
+    remove_task(TASK_COMP_SYNC_TELEMETRY);
+    set_task(1.5, "Task_SyncTelemetryPostRestart", TASK_COMP_SYNC_TELEMETRY);
     set_dhudmessage(255, 215, 0, -1.0, 0.28, 2, 0.1, 3.5, 0.1, 1.0);
     show_dhudmessage(0, "★ OVERTIME SECOND HALF IS LIVE ★");
     client_print(0, print_chat, "^x04[CS:GO Match] OVERTIME SECOND HALF IS LIVE!");

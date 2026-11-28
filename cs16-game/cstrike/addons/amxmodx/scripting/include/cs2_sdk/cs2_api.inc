@@ -58,6 +58,10 @@ native savage_equip_bot_role(id, bool:bFreeLoadout = true, bool:bAllowUtility = 
 // Provider: csgo_molotov
 // ------------------------------------------------------------------------------
 native csgo_get_user_molotov(id);
+native bool:csgo_give_user_molotov(id, bool:bDeductMoney = false);
+native csgo_clear_user_molotov(id);
+native csgo_get_active_molotov_count();
+native bool:csgo_get_active_molotov(index, Float:origin[3], &Float:radius, &team, &Float:remainingTime);
 
 // ------------------------------------------------------------------------------
 // Optional Native Filter (Call set_native_filter("cs2_sdk_native_filter") inside plugin_natives())
@@ -94,7 +98,19 @@ stock bool:cs2_api_has_engine()
 
 stock bool:cs2_api_has_savage_ai()
 {
-    return bool:LibraryExists("bot_savage_ai", LibType_Library);
+    if (!LibraryExists("bot_savage_ai", LibType_Library))
+        return false;
+
+    new iPlugin = is_plugin_loaded("bot_savage_ai.amxx", true);
+    if (iPlugin < 0)
+        iPlugin = is_plugin_loaded("Bot Savage Predator AI v3", false);
+
+    if (iPlugin < 0)
+        return false;
+
+    new szStatus[16];
+    get_plugin(iPlugin, "", 0, "", 0, "", 0, "", 0, szStatus, charsmax(szStatus));
+    return (szStatus[0] == 'r' || szStatus[0] == 'd');
 }
 
 stock bool:cs2_api_has_molotov()
@@ -165,4 +181,44 @@ stock bool:cs2_api_can_player_refund(id)
         return false;
 
     return cs2_can_player_refund(id);
+}
+
+stock bool:cs2_api_get_user_molotov(id)
+{
+    if (!cs2_api_has_molotov())
+        return false;
+
+    return bool:csgo_get_user_molotov(id);
+}
+
+stock bool:cs2_api_give_user_molotov(id, bool:bDeductMoney = false)
+{
+    if (!cs2_api_has_molotov())
+        return false;
+
+    return csgo_give_user_molotov(id, bDeductMoney);
+}
+
+stock cs2_api_clear_user_molotov(id)
+{
+    if (!cs2_api_has_molotov())
+        return 0;
+
+    return csgo_clear_user_molotov(id);
+}
+
+stock cs2_api_get_active_molotov_count()
+{
+    if (!cs2_api_has_molotov())
+        return 0;
+
+    return csgo_get_active_molotov_count();
+}
+
+stock bool:cs2_api_get_active_molotov(index, Float:origin[3], &Float:radius, &team, &Float:remainingTime)
+{
+    if (!cs2_api_has_molotov())
+        return false;
+
+    return csgo_get_active_molotov(index, origin, radius, team, remainingTime);
 }

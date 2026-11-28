@@ -248,6 +248,21 @@ public OnPlayerKilled(victim, killer, shouldgib)
             SetupDoublePeekPair(iBestBot, teamVictim);
         }
     }
+    else if (!IsKnifeRoundActive() && !IsWarmupActive() && iBestBot > 0 && is_user_alive(killer) && flBestDist <= 750.0)
+    {
+        if (Savage_Bridge_RouteMacroGoal(iBestBot, vecKilOrigin, 1.5, false))
+        {
+            new Float:vecBotOrigin[3];
+            pev(iBestBot, pev_origin, vecBotOrigin);
+            if (get_distance_f(vecBotOrigin, vecKilOrigin) <= 600.0)
+            {
+                new Float:vecKilEye[3];
+                xs_vec_copy(vecKilOrigin, vecKilEye);
+                vecKilEye[2] += 17.0;
+                Savage_Bridge_RequestHold(iBestBot, vecKilEye, 0.85);
+            }
+        }
+    }
 
     return HAM_IGNORED;
 }
@@ -326,6 +341,16 @@ public OnPlayerTakeDamage(victim, inflictor, attacker, Float:damage, damage_type
 
 public Event_PlantTheBomb()
 {
+    g_bBombPlantedActive = true;
+    g_bRetakeUtilThrown = false;
+    g_iRetakeSyncTicks = 0;
+
+    if (MolotovTactics_FindPlantedC4(g_vecPlantedC4Origin) || g_bBombsitesFound)
+    {
+        remove_task(TASK_SV_RETAKE_SYNC);
+        set_task(0.5, "Task_CoordinatePostPlantRetake", TASK_SV_RETAKE_SYNC);
+    }
+
     if (!get_pcvar_num(g_pCvarCalls))
         return;
 
@@ -338,9 +363,149 @@ public Event_PlantTheBomb()
 
 public Event_DefusedTheBomb()
 {
+    g_bBombPlantedActive = false;
+    remove_task(TASK_SV_RETAKE_SYNC);
+
     if (!get_pcvar_num(g_pCvarCalls))
         return;
 
     BroadcastTeamCall(CS_TEAM_CT, "^4[Bomb Intel]^4 Bomb defused! Sector secured!");
     PlayTeamAudio(CS_TEAM_CT, "spk radio/clear");
+}
+
+public Task_CoordinatePostPlantRetake()
+{
+    if (!g_bBombPlantedActive || g_bRoundEnded || IsWarmupActive() || IsKnifeRoundActive() || !get_pcvar_num(g_pCvarEnable) || !g_bYapbAvailable)
+        return;
+
+    g_iRetakeSyncTicks++;
+    if (g_iRetakeSyncTicks > 14)
+    {
+        g_bBombPlantedActive = false;
+        return;
+    }
+
+    if (!MolotovTactics_FindPlantedC4(g_vecPlantedC4Origin))
+    {
+        if (g_iRetakeSyncTicks == 1 && g_bBombsitesFound)
+        {
+            new bool:bFoundT = false;
+            for (new t = 1; t <= MaxClients; t++)
+            {
+                if (is_user_alive(t) && safe_cs_get_user_team(t) == CS_TEAM_T)
+                {
+                    new Float:vecT[3];
+                    pev(t, pev_origin, vecT);
+                    xs_vec_copy((get_distance_f(vecT, g_vecBombsiteA) <= get_distance_f(vecT, g_vecBombsiteB)) ? g_vecBombsiteA : g_vecBombsiteB, g_vecPlantedC4Origin);
+                    bFoundT = true;
+                    break;
+                }
+            }
+            if (!bFoundT)
+            {
+                g_bBombPlantedActive = false;
+                return;
+            }
+        }
+        else
+        {
+            g_bBombPlantedActive = false;
+            return;
+        }
+    }
+
+    new iBestUtilBot = 0;
+    new iBestUtilWpn = 0;
+    new iBestUtilScore = -1;
+    new Float:vecBestBotPos[3];
+
+    for (new id = 1; id <= MaxClients; id++)
+    {
+        if (!is_user_alive(id) || !is_user_bot(id))
+            continue;
+
+        new CsTeams:team = safe_cs_get_user_team(id);
+        if (team != CS_TEAM_CT && team != CS_TEAM_T)
+            continue;
+
+        if (!Savage_Bridge_CanRouteMacro(id, true))
+            continue;
+
+        new Float:vecBotOrigin[3];
+        pev(id, pev_origin, vecBotOrigin);
+        new Float:flDistToC4 = get_distance_f(vecBotOrigin, g_vecPlantedC4Origin);
+
+        if (team == CS_TEAM_CT)
+        {
+            if (flDistToC4 > 260.0)
+            {
+                Savage_Bridge_RouteMacroGoal(id, g_vecPlantedC4Origin, 3.0, true);
+            }
+
+            if (!g_bRetakeUtilThrown && flDistToC4 >= 320.0 && flDistToC4 <= 950.0)
+            {
+                new iWpn = 0;
+                if (user_has_weapon(id, CSW_FLASHBANG))
+                    iWpn = CSW_FLASHBANG;
+                else if (user_has_weapon(id, CSW_SMOKEGRENADE))
+                    iWpn = CSW_SMOKEGRENADE;
+
+                if (iWpn > 0)
+                {
+                    new iScore = (g_iPlayerRole[id] == ROLE_SUPPORT || g_iPlayerRole[id] == ROLE_IGL) ? 10 : 1;
+                    if (iWpn == CSW_FLASHBANG)
+                        iScore += 5;
+
+                    if (iScore > iBestUtilScore)
+                    {
+                        iBestUtilScore = iScore;
+                        iBestUtilBot = id;
+                        iBestUtilWpn = iWpn;
+                        xs_vec_copy(vecBotOrigin, vecBestBotPos);
+                    }
+                }
+            }
+        }
+        else if (team == CS_TEAM_T && flDistToC4 > 950.0)
+        {
+            Savage_Bridge_RouteMacroGoal(id, g_vecPlantedC4Origin, 4.0, true);
+        }
+    }
+
+    if (!g_bRetakeUtilThrown && iBestUtilBot > 0 && iBestUtilWpn > 0)
+    {
+        new Float:vecEyes[3], Float:vecAim[3], Float:vecDir[3], Float:vecLaunchCheck[3];
+        xs_vec_copy(vecBestBotPos, vecEyes);
+        vecEyes[2] += 17.0;
+
+        Savage_Bridge_ComputeLobAimPoint(vecEyes, g_vecPlantedC4Origin, (iBestUtilWpn == CSW_FLASHBANG) ? -22.0 : -18.0, vecAim);
+        xs_vec_sub(vecAim, vecEyes, vecDir);
+        new Float:flLen = vector_length(vecDir);
+        if (flLen > 1.0)
+        {
+            xs_vec_div_scalar(vecDir, flLen, vecDir);
+            xs_vec_mul_scalar(vecDir, 180.0, vecLaunchCheck);
+            xs_vec_add(vecEyes, vecLaunchCheck, vecLaunchCheck);
+
+            engfunc(EngFunc_TraceLine, vecEyes, vecLaunchCheck, IGNORE_MONSTERS, iBestUtilBot, 0);
+            new Float:flFrac;
+            get_tr2(0, TR_flFraction, flFrac);
+
+            if (flFrac >= 0.95 && Savage_Bridge_RequestUtilityThrow(iBestUtilBot, iBestUtilWpn, vecAim, 0.65))
+            {
+                g_bRetakeUtilThrown = true;
+                new szBotName[32];
+                get_user_name(iBestUtilBot, szBotName, charsmax(szBotName));
+                BroadcastTeamCall(CS_TEAM_CT, "^4[Retake Utility]^3 %s %s^1: %s out for retake!",
+                    g_szRoleTags[g_iPlayerRole[iBestUtilBot]], szBotName,
+                    (iBestUtilWpn == CSW_FLASHBANG) ? "Pop-flash" : "Smoke");
+                PlayTeamAudio(CS_TEAM_CT, "spk radio/fireinhole");
+            }
+        }
+    }
+
+    if (g_bBombPlantedActive && g_iRetakeSyncTicks < 14)
+    {
+        set_task(2.5, "Task_CoordinatePostPlantRetake", TASK_SV_RETAKE_SYNC);
+    }
 }

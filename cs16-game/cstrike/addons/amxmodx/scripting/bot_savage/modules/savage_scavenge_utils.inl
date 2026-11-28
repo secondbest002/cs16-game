@@ -245,7 +245,7 @@ public Task_TacticalMidLineupScanner()
         if (team != CS_TEAM_T && team != CS_TEAM_CT)
             continue;
 
-        if (flGameTime - g_flLastCombatTime[id] < 3.0 || g_bLineupActive[id])
+        if (flGameTime - g_flLastCombatTime[id] < 3.0 || g_iBotLeaseType[id] != LEASE_NONE)
             continue;
 
         new iRole = g_iPlayerRole[id];
@@ -285,9 +285,8 @@ public Task_TacticalMidLineupScanner()
 TriggerMidLineup(id, bool:isSmoke)
 {
     new CsTeams:team = cs_get_user_team(id);
-    new Float:flGameTime = get_gametime();
 
-    new Float:vecBotEyes[3], Float:vecTarget[3];
+    new Float:vecBotEyes[3], Float:vecTarget[3], Float:vecAimPoint[3];
     pev(id, pev_origin, vecBotEyes);
     vecBotEyes[2] += 17.0;
 
@@ -316,24 +315,18 @@ TriggerMidLineup(id, bool:isSmoke)
         xs_vec_copy(g_vecMapMidPoint, vecTarget);
     }
 
-    new Float:vecDiff[3], Float:vecAimAngles[3];
-    xs_vec_sub(vecTarget, vecBotEyes, vecDiff);
-    vector_to_angle(vecDiff, vecAimAngles);
+    // Compute upward lob aim point for YaPB LookAt bridge (-28° smoke, -38° flash)
+    Savage_Bridge_ComputeLobAimPoint(vecBotEyes, vecTarget, isSmoke ? -28.0 : -38.0, vecAimPoint);
 
-    // Set upward arc pitch for realistic esports lob throw (-28° to -38°)
-    vecAimAngles[0] = isSmoke ? -28.0 : -38.0;
-    ClampAngles(vecAimAngles);
-
-    xs_vec_copy(vecAimAngles, g_vecLineupAngles[id]);
-    g_bLineupActive[id] = true;
-    g_flLineupThrowUntil[id] = flGameTime + 0.45;
+    new iWpnCSW = isSmoke ? CSW_SMOKEGRENADE : CSW_FLASHBANG;
+    if (!Savage_Bridge_RequestUtilityThrow(id, iWpnCSW, vecAimPoint, 0.65))
+        return;
 
     new szName[32];
     get_user_name(id, szName, charsmax(szName));
 
     if (isSmoke)
     {
-        engclient_cmd(id, "weapon_smokegrenade");
         g_bMidSmokedThisRound[team] = true;
         BroadcastTeamCall(team, "^4[Tactical Lineup]^3 %s %s^1: Smoking Mid! Sightline blocked.",
             g_szRoleTags[g_iPlayerRole[id]], szName);
@@ -341,7 +334,6 @@ TriggerMidLineup(id, bool:isSmoke)
     }
     else
     {
-        engclient_cmd(id, "weapon_flashbang");
         g_bMidFlashedThisRound[team] = true;
         BroadcastTeamCall(team, "^4[Tactical Lineup]^3 %s %s^1: Pop-flashing Mid! Turn away!",
             g_szRoleTags[g_iPlayerRole[id]], szName);

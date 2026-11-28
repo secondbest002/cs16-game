@@ -30,6 +30,10 @@ public AdminCmd_RestartWarmup(id, level, cid)
     remove_task(TASK_COMP_COUNTDOWN);
     remove_task(TASK_COMP_SIDEPICK);
     remove_task(TASK_COMP_TIMEOUT);
+    remove_task(TASK_COMP_MATCH_END);
+    remove_task(TASK_COMP_HALF2);
+    remove_task(TASK_COMP_OT2);
+    remove_task(TASK_COMP_SYNC_TELEMETRY);
     ResetToWarmup();
     return PLUGIN_HANDLED;
 }

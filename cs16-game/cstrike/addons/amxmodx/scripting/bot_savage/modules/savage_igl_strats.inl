@@ -60,6 +60,12 @@ public Event_FreezeTimeStart()
     g_bMidSmokedThisRound[CS_TEAM_CT] = false;
     g_bMidFlashedThisRound[CS_TEAM_T] = false;
     g_bMidFlashedThisRound[CS_TEAM_CT] = false;
+    g_bBombPlantedActive = false;
+    g_bRetakeUtilThrown = false;
+    g_iRetakeSyncTicks = 0;
+    remove_task(TASK_SV_RETAKE_SYNC);
+    Savage_Hazard_ResetRound();
+    Savage_MolotovTactics_ResetRound();
 
     // Balance bot roles for both teams
     BalanceTeamRoles(CS_TEAM_T);
@@ -86,11 +92,14 @@ public Event_FreezeTimeStart()
         g_flOriginalMaxSpeed[i] = 0.0;
         g_flLineupThrowUntil[i] = 0.0;
         g_bLineupActive[i] = false;
+        Savage_Bridge_ResetBot(i);
         g_flRearFlankUntil[i] = 0.0;
         g_iTradeLeader[i] = 0;
         g_flTradeFollowUntil[i] = 0.0;
         g_flNextTriggerCheck[i] = 0.0;
         g_flTriggerBurstUntil[i] = 0.0;
+        g_flNextKnifeGoalPush[i] = 0.0;
+        g_flNextMacroGoalPush[i] = 0.0;
     }
 
     // Check Knife Round Condition
@@ -100,11 +109,11 @@ public Event_FreezeTimeStart()
         g_flKnifeRoundStartTime = flGameTime;
         g_bAntiStallTriggered = false;
 
-        // Force YaPB to stop doing bombsite objectives & stop camping!
+        // Force YaPB to stop doing bombsite objectives & stop camping/conga-lining!
         set_cvar_num("yb_ignore_objectives", 1);
         set_cvar_num("yb_camping_allowed", 0);
-        set_cvar_num("yb_user_follow_percent", 100);
-        set_cvar_num("yb_user_max_followers", 4);
+        set_cvar_num("yb_user_follow_percent", 0);
+        set_cvar_num("yb_user_max_followers", 0);
 
         if (get_pcvar_num(g_pCvarKnifeMidBrawl))
         {
@@ -292,19 +301,78 @@ public Event_RoundStart()
     g_bMidFlashedThisRound[CS_TEAM_T] = false;
     g_bMidFlashedThisRound[CS_TEAM_CT] = false;
 
-    // Unfreeze all bots now that freeze time expired
+    // Unfreeze all bots now that freeze time expired & route Knife Round to Mid via YaPB graph
+    new bool:bRouteKnifeMid = (IsKnifeRoundActive() && get_pcvar_num(g_pCvarKnifeMidBrawl) && g_bYapbAvailable && g_bMidPointCalculated);
     for (new i = 1; i <= 32; i++)
     {
         if (is_user_alive(i) && is_user_bot(i))
         {
             new flags = pev(i, pev_flags);
             set_pev(i, pev_flags, flags & ~FL_FROZEN);
+
+            if (bRouteKnifeMid && yb_is_user_bot(i))
+            {
+                yb_set_bot_goal_origin(i, g_vecMapMidPoint);
+                g_flNextKnifeGoalPush[i] = g_flRoundStartTime + 3.0;
+            }
         }
     }
 
     // Dispatch real engine radio command so YaPB bot engine actually obeys!
     DispatchIglEngineCommand(CS_TEAM_T);
     DispatchIglEngineCommand(CS_TEAM_CT);
+
+    // BP-01 Macro Strat Nav-Graph Dispatch (Live Match Terrorist execute/split)
+    if (!IsKnifeRoundActive() && !IsWarmupActive())
+    {
+        Savage_DispatchStratMacroGoals(CS_TEAM_T, false);
+    }
+}
+
+stock Savage_DispatchStratMacroGoals(CsTeams:team, bool:bForceImmediate = false)
+{
+    if (!get_pcvar_num(g_pCvarEnable) || !g_bYapbAvailable || g_bInFreezeTime)
+        return;
+
+    if (IsKnifeRoundActive() || IsWarmupActive() || IsDeathmatchActive() || !g_bBombsitesFound)
+        return;
+
+    new iStrat = g_iTeamStrat[team];
+    if (iStrat != STRAT_RUSH_A && iStrat != STRAT_RUSH_B && iStrat != STRAT_SPLIT)
+        return;
+
+    new Float:flCooldown = bForceImmediate ? 0.0 : 4.0;
+    new Float:vecSplitSite[3];
+    xs_vec_copy((g_iRoundCount % 2 == 0) ? g_vecBombsiteA : g_vecBombsiteB, vecSplitSite);
+
+    for (new id = 1; id <= MaxClients; id++)
+    {
+        if (!is_user_alive(id) || !is_user_bot(id) || safe_cs_get_user_team(id) != team)
+            continue;
+
+        if (!Savage_Bridge_CanRouteMacro(id, true))
+            continue;
+
+        new iRole = g_iPlayerRole[id];
+        if (!bForceImmediate && iStrat != STRAT_SPLIT && iRole == ROLE_LURKER)
+            continue;
+
+        if (iStrat == STRAT_RUSH_A)
+        {
+            Savage_Bridge_RouteMacroGoal(id, g_vecBombsiteA, flCooldown, true);
+        }
+        else if (iStrat == STRAT_RUSH_B)
+        {
+            Savage_Bridge_RouteMacroGoal(id, g_vecBombsiteB, flCooldown, true);
+        }
+        else if (iStrat == STRAT_SPLIT)
+        {
+            if (g_bMidPointCalculated && (iRole == ROLE_ENTRY || iRole == ROLE_IGL || iRole == ROLE_SUPPORT))
+                Savage_Bridge_RouteMacroGoal(id, g_vecMapMidPoint, flCooldown, true);
+            else
+                Savage_Bridge_RouteMacroGoal(id, vecSplitSite, flCooldown, true);
+        }
+    }
 }
 
 public Task_ForceReleaseBots()
@@ -344,8 +412,8 @@ DispatchIglEngineCommand(CsTeams:team)
     if (IsKnifeRoundActive())
     {
         engclient_cmd(iIgl, "stormfront");
-        set_cvar_num("yb_user_follow_percent", 50);
-        set_cvar_num("yb_user_max_followers", 2);
+        set_cvar_num("yb_user_follow_percent", 0);
+        set_cvar_num("yb_user_max_followers", 0);
         return;
     }
 
@@ -355,31 +423,31 @@ DispatchIglEngineCommand(CsTeams:team)
         case STRAT_RUSH_A, STRAT_RUSH_B:
         {
             engclient_cmd(iIgl, "stormfront");
-            set_cvar_num("yb_user_follow_percent", 25);
+            set_cvar_num("yb_user_follow_percent", 10);
             set_cvar_num("yb_user_max_followers", 1);
         }
         case STRAT_DEFAULT:
         {
             engclient_cmd(iIgl, "sticktog");
-            set_cvar_num("yb_user_follow_percent", 20);
+            set_cvar_num("yb_user_follow_percent", 10);
             set_cvar_num("yb_user_max_followers", 1);
         }
         case STRAT_SPLIT:
         {
             engclient_cmd(iIgl, "flankthem");
-            set_cvar_num("yb_user_follow_percent", 20);
+            set_cvar_num("yb_user_follow_percent", 10);
             set_cvar_num("yb_user_max_followers", 1);
         }
         case STRAT_ECO:
         {
             engclient_cmd(iIgl, "regroup");
-            set_cvar_num("yb_user_follow_percent", 25);
+            set_cvar_num("yb_user_follow_percent", 10);
             set_cvar_num("yb_user_max_followers", 1);
         }
         default:
         {
             engclient_cmd(iIgl, "go");
-            set_cvar_num("yb_user_follow_percent", 20);
+            set_cvar_num("yb_user_follow_percent", 10);
             set_cvar_num("yb_user_max_followers", 1);
         }
     }
@@ -424,6 +492,12 @@ public HandleIglStratMenu(id, menu, item)
         get_user_name(id, szPlayerName, charsmax(szPlayerName));
 
         BroadcastTeamCall(team, "^4[IGL Call]^3 %s^1: Strat: ^4%s^1!", szPlayerName, g_szStratNames[iStrat]);
+
+        DispatchIglEngineCommand(team);
+        if (!g_bInFreezeTime)
+        {
+            Savage_DispatchStratMacroGoals(team, true);
+        }
 
         // Bot teammates acknowledge
         for (new b = 1; b <= 32; b++)

@@ -30,6 +30,17 @@ public OnCmdStart(id, uc_handle, seed)
     if (!is_user_bot(id) || !is_user_alive(id))
         return FMRES_IGNORED;
 
+    new Float:flGameTime = get_gametime();
+
+    // YaPB <-> AMXX Action Lease Arbitration Bridge (BP-01):
+    // Executes active utility throws & hazard evasions even when micro_override == 0,
+    // while exiting in O(1) when g_iBotLeaseType[id] == LEASE_NONE.
+    if (!g_bInFreezeTime || IsWarmupActive())
+    {
+        if (Savage_Bridge_ProcessTick(id, uc_handle, flGameTime))
+            return FMRES_HANDLED;
+    }
+
     // Fast-path early return: when micro override is disabled and not Knife Round,
     // YaPB C++ owns 100% of movement/aim/firing — avoid per-tick native overhead.
     if (!get_pcvar_num(g_pCvarMicroOverride) && !IsKnifeRoundActive())
@@ -47,7 +58,6 @@ public OnCmdStart(id, uc_handle, seed)
         return FMRES_IGNORED;
     }
 
-    new Float:flGameTime = get_gametime();
     new iButtons = get_uc(uc_handle, UC_Buttons);
     new iWeapon = get_user_weapon(id);
     new bool:bIsGun = IsGunWeapon(iWeapon);
@@ -97,8 +107,8 @@ public OnCmdStart(id, uc_handle, seed)
             }
         }
 
-        // Target Enemy if in pursuit range (< 950u), directly visible, or Anti-Stall is active!
-        if (iNearestEnemy > 0 && (flNearestDist < 950.0 || g_bAntiStallTriggered || CanSeeDirectly(id, iNearestEnemy)))
+        // Close-range melee duel assist ONLY when enemy is nearby and directly visible (never hijack doors/chokes)
+        if (iNearestEnemy > 0 && flNearestDist <= 180.0 && CanSeeDirectly(id, iNearestEnemy))
         {
             pev(iNearestEnemy, pev_origin, vecEnemyOrigin);
             vecEnemyOrigin[2] += 12.0;
@@ -111,23 +121,16 @@ public OnCmdStart(id, uc_handle, seed)
             set_uc(uc_handle, UC_ViewAngles, vecAimAngles);
             set_uc(uc_handle, UC_ForwardMove, 400.0);
 
-            // Close-range Melee Combat
-            if (flNearestDist <= 85.0)
+            if (flNearestDist <= 82.0)
             {
-                // Heavy Right-Click Stab (195 Backstab / 65 Frontal)
                 iButtons |= IN_ATTACK2;
-
-                // Side-strafe around enemy for backstab
-                new Float:flSide = (id % 2 == 0) ? 250.0 : -250.0;
-                set_uc(uc_handle, UC_SideMove, flSide);
             }
-            else if (flNearestDist <= 115.0)
+            else if (flNearestDist <= 112.0)
             {
-                // Fast Left-Click Slash
                 iButtons |= IN_ATTACK;
             }
 
-            if (flNearestDist < 130.0 && flNearestDist > 70.0 && bIsOnGround && random_num(1, 100) <= 25)
+            if (flNearestDist < 130.0 && flNearestDist > 75.0 && bIsOnGround && random_num(1, 100) <= 20)
             {
                 iButtons |= IN_JUMP;
             }
@@ -135,26 +138,28 @@ public OnCmdStart(id, uc_handle, seed)
             set_uc(uc_handle, UC_Buttons, iButtons);
             return FMRES_IGNORED;
         }
-        else
-        {
-            // During open navigation: If bot has direct line of sight to Mid, guide forward
-            if (CanSeeDirectlyToPoint(vecBotEyes, g_vecMapMidPoint))
-            {
-                new Float:vecDiff[3], Float:vecAimAngles[3];
-                xs_vec_sub(g_vecMapMidPoint, vecBotEyes, vecDiff);
-                vector_to_angle(vecDiff, vecAimAngles);
-                ClampAngles(vecAimAngles);
 
-                set_uc(uc_handle, UC_ViewAngles, vecAimAngles);
-                set_uc(uc_handle, UC_ForwardMove, 400.0);
-                set_uc(uc_handle, UC_SideMove, 0.0);
-                set_uc(uc_handle, UC_Buttons, iButtons);
-                return FMRES_IGNORED;
+        // Throttled YaPB waypoint-graph goal updates (never overwrite UC_ForwardMove during open navigation)
+        if (g_bYapbAvailable && yb_is_user_bot(id) && flGameTime >= g_flNextKnifeGoalPush[id])
+        {
+            if (g_bAntiStallTriggered && iNearestEnemy > 0)
+            {
+                pev(iNearestEnemy, pev_origin, vecEnemyOrigin);
+                yb_set_bot_goal_origin(id, vecEnemyOrigin);
+                g_flNextKnifeGoalPush[id] = flGameTime + 2.0;
             }
-            // Otherwise, let YaPB's waypoint graph pathfind out of corridors naturally at full speed!
-            set_uc(uc_handle, UC_ForwardMove, 400.0);
-            return FMRES_IGNORED;
+            else if (g_bMidPointCalculated && get_distance_f(vecBotOrigin, g_vecMapMidPoint) > 420.0
+                && yb_get_bot_task(id) == YB_TASK_NORMAL)
+            {
+                yb_set_bot_goal_origin(id, g_vecMapMidPoint);
+                g_flNextKnifeGoalPush[id] = flGameTime + 3.0;
+            }
+            else
+            {
+                g_flNextKnifeGoalPush[id] = flGameTime + 1.0;
+            }
         }
+        return FMRES_IGNORED;
     }
 
     // -------------------------------------------------------------
@@ -173,24 +178,8 @@ public OnCmdStart(id, uc_handle, seed)
     }
 
     // -------------------------------------------------------------
-    // Tactical Lineup Throw Execution (Mid Smoke & Pop-Flash)
+    // Tactical Lineup Throw Execution is centralized in Savage_Bridge_ProcessTick (BP-01)
     // -------------------------------------------------------------
-    if (g_bLineupActive[id])
-    {
-        if (flGameTime < g_flLineupThrowUntil[id])
-        {
-            set_uc(uc_handle, UC_ViewAngles, g_vecLineupAngles[id]);
-            iButtons |= IN_ATTACK;
-            set_uc(uc_handle, UC_Buttons, iButtons);
-            set_uc(uc_handle, UC_ForwardMove, 150.0);
-            return FMRES_HANDLED;
-        }
-        else
-        {
-            g_bLineupActive[id] = false;
-            engclient_cmd(id, "lastinv");
-        }
-    }
 
     // -------------------------------------------------------------
     // Squad Pacing & Stealth Synchronization (v3.4)

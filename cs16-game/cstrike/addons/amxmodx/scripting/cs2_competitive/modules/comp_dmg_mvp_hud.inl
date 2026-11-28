@@ -133,6 +133,11 @@ public AnnounceMVP()
 
     if (best_player > 0)
     {
+        if (IsLiveMatchState())
+        {
+            g_PlayerMVPs[best_player]++;
+        }
+
         new mvp_name[32];
         get_user_name(best_player, mvp_name, charsmax(mvp_name));
         client_print(0, print_chat, "^x04★ MVP: %s for %s! ★", mvp_name, reason);
@@ -427,9 +432,15 @@ public ResetToWarmup()
     remove_task(TASK_COMP_WARMUP);
     remove_task(TASK_COMP_SWEEP1);
     remove_task(TASK_COMP_SWEEP2);
+    remove_task(TASK_COMP_MATCH_END);
+    remove_task(TASK_COMP_SYNC_TELEMETRY);
     set_task(1.0, "Task_WarmupTimer", TASK_COMP_WARMUP, _, _, "b");
     set_task(1.5, "Task_SweepWarmupBots", TASK_COMP_SWEEP1);
     set_task(4.5, "Task_SweepWarmupBots", TASK_COMP_SWEEP2);
+
+    ResetMatchTelemetry();
+    BroadcastCS2PlayerStats(0, true);
+    BroadcastCS2RoundHistory(0, true);
 
     for (new i = 1; i <= MaxClients; i++)
     {
@@ -456,5 +467,148 @@ public ResetPlayerDamage(id)
     {
         g_DamageDealt[id][v] = 0;
         g_HitsDealt[id][v] = 0;
+    }
+}
+
+// ========================================================================
+// CS2 SCOREBOARD TELEMETRY BRIDGE (BP-04)
+// ========================================================================
+stock ResetMatchTelemetry()
+{
+    for (new i = 1; i <= 32; i++)
+    {
+        g_PlayerAssists[i] = 0;
+        g_PlayerMVPs[i] = 0;
+        g_TotalMatchDamage[i] = 0;
+    }
+
+    g_RoundHistCount = 0;
+    g_PendingWinReason = WIN_REASON_NONE;
+    g_LastRoundWinTime = 0.0;
+
+    for (new r = 0; r < MAX_ROUND_HISTORY; r++)
+    {
+        g_RoundHistWinner[r] = 0;
+        g_RoundHistReason[r] = 0;
+    }
+}
+
+stock BroadcastCS2PlayerStats(targetId = 0, bool:bClear = false)
+{
+    if (!g_MsgPlayerStats)
+        g_MsgPlayerStats = get_user_msgid("CS2PlayerStats");
+    if (!g_MsgPlayerStats)
+        return;
+
+    if (targetId > 0 && (!is_user_connected(targetId) || is_user_bot(targetId)))
+        return;
+
+    new dest = (targetId > 0) ? MSG_ONE : MSG_ALL;
+
+    if (bClear || !IS_COMPETITIVE_ENABLED())
+    {
+        message_begin(dest, g_MsgPlayerStats, _, targetId);
+        write_byte(0);
+        message_end();
+        return;
+    }
+
+    new ids[32], n = 0;
+    for (new i = 1; i <= MaxClients; i++)
+    {
+        if (is_user_connected(i))
+        {
+            ids[n++] = i;
+        }
+    }
+
+    if (n == 0)
+        return;
+
+    // Chunk at max 24 players per message (1 + 24 * 7 = 169 bytes < 192 GoldSrc limit)
+    for (new start = 0; start < n; start += 24)
+    {
+        new chunk = n - start;
+        if (chunk > 24) chunk = 24;
+
+        message_begin(dest, g_MsgPlayerStats, _, targetId);
+        write_byte(chunk);
+        for (new k = 0; k < chunk; k++)
+        {
+            new p = ids[start + k];
+            write_byte(p);
+            write_short(clamp(g_PlayerAssists[p], 0, 32767));
+            write_short(clamp(g_PlayerMVPs[p], 0, 32767));
+            write_short(clamp(g_TotalMatchDamage[p], 0, 65535));
+        }
+        message_end();
+    }
+}
+
+stock BroadcastCS2RoundHistory(targetId = 0, bool:bClear = false)
+{
+    if (!g_MsgRoundHist)
+        g_MsgRoundHist = get_user_msgid("CS2RoundHist");
+    if (!g_MsgRoundHist)
+        return;
+
+    if (targetId > 0 && (!is_user_connected(targetId) || is_user_bot(targetId)))
+        return;
+
+    new dest = (targetId > 0) ? MSG_ONE : MSG_ALL;
+
+    if (bClear || !IS_COMPETITIVE_ENABLED())
+    {
+        message_begin(dest, g_MsgRoundHist, _, targetId);
+        write_byte(0);
+        write_byte(0);
+        write_byte(0);
+        write_byte(0);
+        message_end();
+        return;
+    }
+
+    new count = clamp(g_RoundHistCount, 0, MAX_ROUND_HISTORY);
+    message_begin(dest, g_MsgRoundHist, _, targetId);
+    write_byte(clamp(g_MaxRoundsHalf, 1, 255));
+    write_byte(clamp(g_ScoreCT, 0, 255));
+    write_byte(clamp(g_ScoreT, 0, 255));
+    write_byte(count);
+    for (new i = 0; i < count; i++)
+    {
+        new packed = ((g_RoundHistWinner[i] & 0x0F) << 4) | (g_RoundHistReason[i] & 0x0F);
+        write_byte(packed);
+    }
+    message_end();
+}
+
+public Task_SyncTelemetryPostRestart()
+{
+    if (!IS_COMPETITIVE_ENABLED())
+        return;
+
+    if (IsLiveMatchState() || g_MatchState == STATE_FINISHED)
+    {
+        BroadcastCS2PlayerStats(0);
+        BroadcastCS2RoundHistory(0);
+    }
+}
+
+public Task_SyncClientTelemetry(taskid)
+{
+    new id = taskid - TASK_COMP_CLIENT_SYNC;
+    if (!is_user_connected(id) || is_user_bot(id))
+        return;
+
+    if (!IS_COMPETITIVE_ENABLED() || (!IsLiveMatchState() && g_MatchState != STATE_FINISHED &&
+        g_MatchState != STATE_HALFTIME && g_MatchState != STATE_OVERTIME_HALFTIME))
+    {
+        BroadcastCS2PlayerStats(id, true);
+        BroadcastCS2RoundHistory(id, true);
+    }
+    else
+    {
+        BroadcastCS2PlayerStats(id);
+        BroadcastCS2RoundHistory(id);
     }
 }

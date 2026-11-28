@@ -180,6 +180,10 @@ SetPlayerStrat(id, iStrat)
 
     // Immediately dispatch engine radio & follow orders
     DispatchIglEngineCommand(team);
+    if (!g_bInFreezeTime)
+    {
+        Savage_DispatchStratMacroGoals(team, true);
+    }
 }
 
 stock Cmd_SetTeamEconomy(id, iEconMode, bool:bFullRefund = false)
@@ -241,6 +245,7 @@ stock Cmd_SetTeamEconomy(id, iEconMode, bool:bFullRefund = false)
                     if (bFullRefund)
                     {
                         new count = cs2_api_refund_player_all(b, cost);
+                        cs2_api_clear_user_molotov(b);
                         if (count > 0)
                         {
                             bRefunded = true;
@@ -1126,17 +1131,21 @@ public Event_RoundEnd()
 {
     g_bRoundEnded = true;
     g_flRoundEndTime = get_gametime();
+    g_bBombPlantedActive = false;
+    remove_task(TASK_SV_RETAKE_SYNC);
 }
 
 public Event_RoundEndAudio()
 {
     g_bRoundEnded = true;
     g_flRoundEndTime = get_gametime();
+    g_bBombPlantedActive = false;
+    remove_task(TASK_SV_RETAKE_SYNC);
 }
 
 public Task_ScavengeGroundWeapons()
 {
-    if (!get_pcvar_num(g_pCvarEnable) || !get_pcvar_num(g_pCvarMicroOverride) || !get_pcvar_num(g_pCvarWeaponScavenge) || g_bInFreezeTime || IsWarmupActive() || IsKnifeRoundActive())
+    if (!get_pcvar_num(g_pCvarEnable) || !get_pcvar_num(g_pCvarWeaponScavenge) || g_bInFreezeTime || IsWarmupActive() || IsKnifeRoundActive())
         return;
 
     new Float:flGameTime = get_gametime();
@@ -1158,6 +1167,10 @@ public Task_ScavengeGroundWeapons()
         if (flGameTime - g_flLastWeaponSwapTime[id] < 4.0)
             continue;
 
+        // Protect active combat, plant/defuse, and live C4 carriers from detouring for guns
+        if (!Savage_Bridge_CanRouteMacro(id, g_bRoundEnded))
+            continue;
+
         new iCurPrim = GetUserPrimaryWeapon(id);
         new iCurTier = GetRoleWeaponTier(id, iCurPrim, g_bRoundEnded);
 
@@ -1168,6 +1181,7 @@ public Task_ScavengeGroundWeapons()
         new iBestEnt = 0;
         new iBestTier = iCurTier;
         new Float:flBestDist = g_bRoundEnded ? 2500.0 : 650.0;
+        new Float:vecBestOrigin[3];
         new Float:vecBotOrigin[3];
         pev(id, pev_origin, vecBotOrigin);
 
@@ -1192,6 +1206,7 @@ public Task_ScavengeGroundWeapons()
                     flBestDist = flDist;
                     iBestEnt = ent;
                     iBestTier = iTier;
+                    xs_vec_copy(vecWpnOrigin, vecBestOrigin);
                 }
             }
         }
@@ -1217,6 +1232,7 @@ public Task_ScavengeGroundWeapons()
                     flBestDist = flDist;
                     iBestEnt = ent;
                     iBestTier = iTier;
+                    xs_vec_copy(vecWpnOrigin, vecBestOrigin);
                 }
             }
         }
@@ -1225,6 +1241,7 @@ public Task_ScavengeGroundWeapons()
         {
             g_iScavengeTarget[id] = iBestEnt;
             g_flScavengeExpire[id] = flGameTime + (g_bRoundEnded ? 6.0 : 3.5);
+            Savage_Bridge_RouteMacroGoal(id, vecBestOrigin, 1.2, g_bRoundEnded);
         }
     }
 }

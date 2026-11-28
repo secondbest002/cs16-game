@@ -100,6 +100,23 @@ stock AssignBotRoleDeterministic(id)
     g_iPlayerRole[id] = iBestRole;
 }
 
+stock GetTeamAverageMoney(CsTeams:iTeam)
+{
+    new iTotal = 0;
+    new iCount = 0;
+
+    for (new i = 1; i <= MaxClients; i++)
+    {
+        if (is_user_alive(i) && safe_cs_get_user_team(i) == iTeam)
+        {
+            iTotal += cs_get_user_money(i);
+            iCount++;
+        }
+    }
+
+    return (iCount > 0) ? (iTotal / iCount) : 0;
+}
+
 stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
 {
     if (!xash_is_bot_combat_ready(id) || IsKnifeRoundActive())
@@ -122,10 +139,47 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
 
     new iRole = g_iPlayerRole[id];
     new iMoney = bFreeLoadout ? 16000 : cs_get_user_money(id);
+    new iEconMode = bFreeLoadout ? ECON_FULL : g_iTeamEconomyCall[iTeam];
 
-    // Pada Live Match (bFreeLoadout == false), jika uang < $1500 (Full Eco), hanya beri utility/pistol
-    new bool:bFullBuy  = (bFreeLoadout || iMoney >= 4200);
-    new bool:bForceBuy = (!bFullBuy && iMoney >= 2200);
+    new iRoundNum = cs2_state_get_match_round();
+    if (iRoundNum <= 0)
+        iRoundNum = g_iRoundCount;
+    new iRoundInHalf = (iRoundNum > 0) ? (((iRoundNum - 1) % 12) + 1) : 1;
+    new bool:bIsPistolRound = (!bFreeLoadout && !IsWarmupActive() && !IsDeathmatchActive() && iRoundInHalf == 1);
+
+    // Pada Live Match (bFreeLoadout == false), patuhi perintah ekonomi IGL & Team Eco Guard
+    new bool:bFullBuy = false;
+    new bool:bForceBuy = false;
+    if (bFreeLoadout)
+    {
+        bFullBuy = true;
+    }
+    else if (!bIsPistolRound)
+    {
+        if (iEconMode == ECON_ECO)
+        {
+            bFullBuy = false;
+            bForceBuy = false;
+        }
+        else if (iEconMode == ECON_HALF)
+        {
+            bFullBuy = false;
+            bForceBuy = (iMoney >= 2000);
+        }
+        else if (iEconMode == ECON_FORCE)
+        {
+            bFullBuy = (iMoney >= 4200);
+            bForceBuy = (!bFullBuy && iMoney >= 1800);
+        }
+        else
+        {
+            bFullBuy = (iMoney >= 4200);
+            if (!bFullBuy && iMoney >= 2000)
+            {
+                bForceBuy = (iEconMode == ECON_FULL || iRoundInHalf == 12 || GetTeamAverageMoney(iTeam) >= 3200);
+            }
+        }
+    }
 
     // Cek apakah bot sudah membeli atau memiliki senjata slot1 (primary) pada spawn (misal via native YaPB buy)
     new iExistingPrimary = GetUserPrimaryWeapon(id);
@@ -139,6 +193,7 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
     if (!bHasPrimary)
     {
         strip_user_weapons(id);
+        cs2_api_clear_user_molotov(id);
         give_item(id, "weapon_knife");
 
         // Kembalikan C4 jika sedang dalam Live Match MR12
@@ -151,29 +206,84 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
 
     if (!bAllowUtility)
     {
+        cs2_api_clear_user_molotov(id);
         cs_set_user_bpammo(id, CSW_HEGRENADE, 0);
         cs_set_user_bpammo(id, CSW_FLASHBANG, 0);
         cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 0);
         cs_set_user_plant(id, 0, 0);
     }
 
-    // 3. Berikan Kevlar + Helmet
+    // Pistol Round ($800 budget realism: Round 1 & Round 13)
+    if (bIsPistolRound && !bHasPrimary)
+    {
+        cs_set_user_defuse(id, 0);
+        new szPistol[32], iPistolCSW, iPistolAmmo, iPistolCost;
+
+        switch (iRole)
+        {
+            case ROLE_ENTRY, ROLE_AWPER:
+            {
+                copy(szPistol, charsmax(szPistol), "weapon_deagle");
+                iPistolCSW = CSW_DEAGLE;
+                iPistolAmmo = 35;
+                iPistolCost = 650;
+                cs_set_user_armor(id, 0, CS_ARMOR_NONE);
+            }
+            case ROLE_SUPPORT:
+            {
+                copy(szPistol, charsmax(szPistol), "weapon_p228");
+                iPistolCSW = CSW_P228;
+                iPistolAmmo = 52;
+                iPistolCost = 600;
+                cs_set_user_armor(id, 0, CS_ARMOR_NONE);
+                if (bAllowUtility)
+                {
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                    iPistolCost += 200;
+                }
+            }
+            default:
+            {
+                copy(szPistol, charsmax(szPistol), (iTeam == CS_TEAM_T) ? "weapon_glock18" : "weapon_usp");
+                iPistolCSW = (iTeam == CS_TEAM_T) ? CSW_GLOCK18 : CSW_USP;
+                iPistolAmmo = (iTeam == CS_TEAM_T) ? 120 : 100;
+                iPistolCost = 650;
+                cs_set_user_armor(id, 100, CS_ARMOR_KEVLAR);
+            }
+        }
+
+        new iPistolEnt = give_item(id, szPistol);
+        cs_set_user_bpammo(id, iPistolCSW, iPistolAmmo);
+        if (iPistolCSW == CSW_USP)
+        {
+            if (!pev_valid(iPistolEnt))
+                iPistolEnt = xash_find_weapon_ent(id, "weapon_usp");
+            if (pev_valid(iPistolEnt))
+                cs_set_weapon_silen(iPistolEnt, 1, 0);
+        }
+        xash_force_deploy_weapon(id, iPistolEnt, szPistol, iPistolCSW);
+        cs_set_user_money(id, max(0, iMoney - iPistolCost), 1);
+        return 1;
+    }
+
+    // 3. Berikan Kevlar + Helmet (Eco penuh tidak mendapat armor gratis)
     if (bFullBuy || bForceBuy)
     {
         cs_set_user_armor(id, 100, CS_ARMOR_VESTHELM);
     }
-    else
+    else if (!bHasPrimary)
     {
-        cs_set_user_armor(id, 100, CS_ARMOR_KEVLAR);
+        cs_set_user_armor(id, 0, CS_ARMOR_NONE);
     }
 
     // 4. Defuse Kit Policy:
     // Pastikan cs_set_user_defuse TIDAK PERNAH dipanggil saat Deathmatch, Warmup, Knife Round, atau Free For All.
-    // Defuse kit hanya boleh ada saat Live Match MR12!
+    // Defuse kit hanya boleh ada saat Live Match MR12 ketika tim sedang membeli!
     new bool:bAllowDefuse = (bAllowUtility && !IsDeathmatchActive() && !IsWarmupActive() && !IsKnifeRoundActive() && !IsFreeForAllActive());
     if (iTeam == CS_TEAM_CT)
     {
-        if (bAllowDefuse && (bFreeLoadout || iRole == ROLE_SUPPORT || iRole == ROLE_IGL || iMoney >= 200))
+        if (bAllowDefuse && (bFreeLoadout || ((bFullBuy || bForceBuy) && (iRole == ROLE_SUPPORT || iRole == ROLE_IGL || iMoney >= 600))))
         {
             cs_set_user_defuse(id, 1, 0, 160, 0, "defuser", 0);
         }
@@ -183,7 +293,7 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
         }
     }
 
-    // 5. Tentukan Senjata Utama, Pistol, dan Utility Berdasarkan Role
+    // 5. Tentukan Senjata Utama, Pistol, dan Utility Berdasarkan Role (Tier-1 + MAC-10/MP5/P250 Half-Buy)
     new szPrimary[32], iPrimaryCSW, iPrimaryAmmo;
     new szSecondary[32], iSecondaryCSW, iSecondaryAmmo;
     new bool:bAttachSilencer = false;
@@ -200,22 +310,54 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
             }
             else if (bForceBuy)
             {
-                formatex(szPrimary, charsmax(szPrimary), (iTeam == CS_TEAM_T) ? "weapon_galil" : "weapon_famas");
-                iPrimaryCSW  = (iTeam == CS_TEAM_T) ? CSW_GALIL : CSW_FAMAS;
-                iPrimaryAmmo = 90;
+                if (iTeam == CS_TEAM_T)
+                {
+                    new bool:bGalil = (iMoney >= 2700);
+                    copy(szPrimary, charsmax(szPrimary), bGalil ? "weapon_galil" : "weapon_mac10");
+                    iPrimaryCSW  = bGalil ? CSW_GALIL : CSW_MAC10;
+                    iPrimaryAmmo = bGalil ? 90 : 100;
+                }
+                else
+                {
+                    new bool:bFamas = (iMoney >= 2950);
+                    copy(szPrimary, charsmax(szPrimary), bFamas ? "weapon_famas" : "weapon_mp5navy");
+                    iPrimaryCSW  = bFamas ? CSW_FAMAS : CSW_MP5NAVY;
+                    iPrimaryAmmo = bFamas ? 90 : 120;
+                }
             }
 
-            formatex(szSecondary, charsmax(szSecondary), "weapon_deagle");
-            iSecondaryCSW  = CSW_DEAGLE;
-            iSecondaryAmmo = 35;
+            if (bFullBuy || bForceBuy || iMoney >= 1800)
+            {
+                copy(szSecondary, charsmax(szSecondary), "weapon_deagle");
+                iSecondaryCSW  = CSW_DEAGLE;
+                iSecondaryAmmo = 35;
+            }
+            else
+            {
+                copy(szSecondary, charsmax(szSecondary), (iTeam == CS_TEAM_T) ? "weapon_glock18" : "weapon_usp");
+                iSecondaryCSW  = (iTeam == CS_TEAM_T) ? CSW_GLOCK18 : CSW_USP;
+                iSecondaryAmmo = (iTeam == CS_TEAM_T) ? 120 : 100;
+            }
 
             if (bAllowUtility)
             {
-                // Utility Entry: 1x Flashbang + 1x HE Grenade
-                give_item(id, "weapon_flashbang");
-                cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
-                give_item(id, "weapon_hegrenade");
-                cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                if (bFullBuy)
+                {
+                    // Utility Entry (Full Buy): Molotov + 1x Flashbang
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                    if (!cs2_api_give_user_molotov(id, bHasPrimary && !bFreeLoadout))
+                    {
+                        give_item(id, "weapon_hegrenade");
+                        cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                    }
+                }
+                else if (bForceBuy)
+                {
+                    // Utility Entry (Force Buy): 1x Flashbang
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                }
             }
         }
         case ROLE_AWPER:
@@ -228,22 +370,57 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
             }
             else if (bForceBuy)
             {
-                formatex(szPrimary, charsmax(szPrimary), "weapon_scout");
-                iPrimaryCSW  = CSW_SCOUT;
-                iPrimaryAmmo = 90;
+                if (iEconMode == ECON_FORCE && iMoney >= 2750)
+                {
+                    copy(szPrimary, charsmax(szPrimary), "weapon_scout");
+                    iPrimaryCSW  = CSW_SCOUT;
+                    iPrimaryAmmo = 90;
+                }
+                else if (iTeam == CS_TEAM_T)
+                {
+                    new bool:bGalil = (iMoney >= 2700);
+                    copy(szPrimary, charsmax(szPrimary), bGalil ? "weapon_galil" : "weapon_mac10");
+                    iPrimaryCSW  = bGalil ? CSW_GALIL : CSW_MAC10;
+                    iPrimaryAmmo = bGalil ? 90 : 100;
+                }
+                else
+                {
+                    new bool:bFamas = (iMoney >= 2950);
+                    copy(szPrimary, charsmax(szPrimary), bFamas ? "weapon_famas" : "weapon_mp5navy");
+                    iPrimaryCSW  = bFamas ? CSW_FAMAS : CSW_MP5NAVY;
+                    iPrimaryAmmo = bFamas ? 90 : 120;
+                }
             }
 
-            formatex(szSecondary, charsmax(szSecondary), "weapon_deagle");
-            iSecondaryCSW  = CSW_DEAGLE;
-            iSecondaryAmmo = 35;
+            if (bFullBuy || bForceBuy || iMoney >= 1800)
+            {
+                copy(szSecondary, charsmax(szSecondary), "weapon_deagle");
+                iSecondaryCSW  = CSW_DEAGLE;
+                iSecondaryAmmo = 35;
+            }
+            else
+            {
+                copy(szSecondary, charsmax(szSecondary), (iTeam == CS_TEAM_T) ? "weapon_glock18" : "weapon_usp");
+                iSecondaryCSW  = (iTeam == CS_TEAM_T) ? CSW_GLOCK18 : CSW_USP;
+                iSecondaryAmmo = (iTeam == CS_TEAM_T) ? 120 : 100;
+            }
 
             if (bAllowUtility)
             {
-                // Utility AWPer: 1x Flashbang + 1x Smoke
-                give_item(id, "weapon_flashbang");
-                cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
-                give_item(id, "weapon_smokegrenade");
-                cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
+                if (bFullBuy)
+                {
+                    // Utility AWPer (Full Buy): 1x Flashbang + 1x Smoke
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                    give_item(id, "weapon_smokegrenade");
+                    cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
+                }
+                else if (bForceBuy)
+                {
+                    // Utility AWPer (Force Buy): 1x Flashbang
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                }
             }
         }
         case ROLE_SUPPORT:
@@ -257,24 +434,47 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
             }
             else if (bForceBuy)
             {
-                formatex(szPrimary, charsmax(szPrimary), (iTeam == CS_TEAM_T) ? "weapon_galil" : "weapon_famas");
-                iPrimaryCSW  = (iTeam == CS_TEAM_T) ? CSW_GALIL : CSW_FAMAS;
-                iPrimaryAmmo = 90;
+                copy(szPrimary, charsmax(szPrimary), (iTeam == CS_TEAM_T) ? "weapon_mac10" : "weapon_mp5navy");
+                iPrimaryCSW  = (iTeam == CS_TEAM_T) ? CSW_MAC10 : CSW_MP5NAVY;
+                iPrimaryAmmo = (iTeam == CS_TEAM_T) ? 100 : 120;
             }
 
-            formatex(szSecondary, charsmax(szSecondary), (iTeam == CS_TEAM_T) ? "weapon_p228" : "weapon_fiveseven");
-            iSecondaryCSW  = (iTeam == CS_TEAM_T) ? CSW_P228 : CSW_FIVESEVEN;
-            iSecondaryAmmo = (iTeam == CS_TEAM_T) ? 52 : 100;
+            if (bFullBuy || bForceBuy || iMoney >= 1500)
+            {
+                copy(szSecondary, charsmax(szSecondary), "weapon_p228");
+                iSecondaryCSW  = CSW_P228;
+                iSecondaryAmmo = 52;
+            }
+            else
+            {
+                copy(szSecondary, charsmax(szSecondary), (iTeam == CS_TEAM_T) ? "weapon_glock18" : "weapon_usp");
+                iSecondaryCSW  = (iTeam == CS_TEAM_T) ? CSW_GLOCK18 : CSW_USP;
+                iSecondaryAmmo = (iTeam == CS_TEAM_T) ? 120 : 100;
+            }
 
             if (bAllowUtility)
             {
-                // Utility Support: Full Utility (Smoke + 2x Flashbang + HE Grenade)
-                give_item(id, "weapon_smokegrenade");
-                cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
-                give_item(id, "weapon_flashbang");
-                cs_set_user_bpammo(id, CSW_FLASHBANG, 2);
-                give_item(id, "weapon_hegrenade");
-                cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                if (bFullBuy)
+                {
+                    // Utility Support (Full Buy): Molotov + 1x Smoke + 2x Flashbang
+                    give_item(id, "weapon_smokegrenade");
+                    cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 2);
+                    if (!cs2_api_give_user_molotov(id, bHasPrimary && !bFreeLoadout))
+                    {
+                        give_item(id, "weapon_hegrenade");
+                        cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                    }
+                }
+                else if (bForceBuy)
+                {
+                    // Utility Support (Force Buy): 1x Smoke + 1x Flashbang
+                    give_item(id, "weapon_smokegrenade");
+                    cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                }
             }
         }
         case ROLE_LURKER:
@@ -288,22 +488,55 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
             }
             else if (bForceBuy)
             {
-                formatex(szPrimary, charsmax(szPrimary), "weapon_mp5navy");
-                iPrimaryCSW  = CSW_MP5NAVY;
-                iPrimaryAmmo = 120;
+                copy(szPrimary, charsmax(szPrimary), (iTeam == CS_TEAM_T) ? "weapon_mac10" : "weapon_mp5navy");
+                iPrimaryCSW  = (iTeam == CS_TEAM_T) ? CSW_MAC10 : CSW_MP5NAVY;
+                iPrimaryAmmo = (iTeam == CS_TEAM_T) ? 100 : 120;
             }
 
-            formatex(szSecondary, charsmax(szSecondary), "weapon_usp");
-            iSecondaryCSW  = CSW_USP;
-            iSecondaryAmmo = 100;
+            if (bForceBuy || iMoney >= 1500)
+            {
+                copy(szSecondary, charsmax(szSecondary), "weapon_p228");
+                iSecondaryCSW  = CSW_P228;
+                iSecondaryAmmo = 52;
+            }
+            else
+            {
+                copy(szSecondary, charsmax(szSecondary), (iTeam == CS_TEAM_T) ? "weapon_glock18" : "weapon_usp");
+                iSecondaryCSW  = (iTeam == CS_TEAM_T) ? CSW_GLOCK18 : CSW_USP;
+                iSecondaryAmmo = (iTeam == CS_TEAM_T) ? 120 : 100;
+            }
 
             if (bAllowUtility)
             {
-                // Utility Lurker: 1x Smoke + 1x Flashbang
-                give_item(id, "weapon_smokegrenade");
-                cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
-                give_item(id, "weapon_flashbang");
-                cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                if (bFullBuy)
+                {
+                    // Utility Lurker (Full Buy): 50% Molotov / 50% HE + 1x Smoke + 1x Flashbang
+                    give_item(id, "weapon_smokegrenade");
+                    cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+
+                    new bool:bGiveMolo = ((id + g_iRoundCount) % 2 == 0) || cs2_api_get_user_molotov(id);
+                    if (bGiveMolo)
+                    {
+                        if (!cs2_api_give_user_molotov(id, bHasPrimary && !bFreeLoadout))
+                        {
+                            give_item(id, "weapon_hegrenade");
+                            cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                        }
+                    }
+                    else if (!cs2_api_get_user_molotov(id))
+                    {
+                        give_item(id, "weapon_hegrenade");
+                        cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                    }
+                }
+                else if (bForceBuy)
+                {
+                    // Utility Lurker (Force Buy): 1x Smoke
+                    give_item(id, "weapon_smokegrenade");
+                    cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
+                }
             }
         }
         case ROLE_IGL:
@@ -321,19 +554,46 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
                 iPrimaryAmmo = 100;
             }
 
-            formatex(szSecondary, charsmax(szSecondary), "weapon_deagle");
-            iSecondaryCSW  = CSW_DEAGLE;
-            iSecondaryAmmo = 35;
+            if (bFullBuy)
+            {
+                copy(szSecondary, charsmax(szSecondary), "weapon_deagle");
+                iSecondaryCSW  = CSW_DEAGLE;
+                iSecondaryAmmo = 35;
+            }
+            else if (bForceBuy || iMoney >= 1500)
+            {
+                copy(szSecondary, charsmax(szSecondary), "weapon_p228");
+                iSecondaryCSW  = CSW_P228;
+                iSecondaryAmmo = 52;
+            }
+            else
+            {
+                copy(szSecondary, charsmax(szSecondary), (iTeam == CS_TEAM_T) ? "weapon_glock18" : "weapon_usp");
+                iSecondaryCSW  = (iTeam == CS_TEAM_T) ? CSW_GLOCK18 : CSW_USP;
+                iSecondaryAmmo = (iTeam == CS_TEAM_T) ? 120 : 100;
+            }
 
             if (bAllowUtility)
             {
-                // Utility IGL: Full Tactical Utility (Smoke + 2x Flashbang + HE Grenade)
-                give_item(id, "weapon_smokegrenade");
-                cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
-                give_item(id, "weapon_flashbang");
-                cs_set_user_bpammo(id, CSW_FLASHBANG, 2);
-                give_item(id, "weapon_hegrenade");
-                cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                if (bFullBuy)
+                {
+                    // Utility IGL (Full Buy): 1x HE Grenade + 1x Smoke + 2x Flashbang
+                    give_item(id, "weapon_smokegrenade");
+                    cs_set_user_bpammo(id, CSW_SMOKEGRENADE, 1);
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 2);
+                    if (!cs2_api_get_user_molotov(id))
+                    {
+                        give_item(id, "weapon_hegrenade");
+                        cs_set_user_bpammo(id, CSW_HEGRENADE, 1);
+                    }
+                }
+                else if (bForceBuy)
+                {
+                    // Utility IGL (Force Buy): 1x Flashbang
+                    give_item(id, "weapon_flashbang");
+                    cs_set_user_bpammo(id, CSW_FLASHBANG, 1);
+                }
             }
         }
     }
@@ -406,7 +666,14 @@ stock EquipBotByRole(id, bool:bFreeLoadout, bool:bAllowUtility = true)
         // Kurangi uang hanya saat Live Match (bFreeLoadout == false) dan bot belum beli sendiri
         if (!bFreeLoadout)
         {
-            new iCost = bFullBuy ? 4200 : (bForceBuy ? 2200 : 800);
+            new iCost = 0;
+            if (bFullBuy)
+                iCost = 4200;
+            else if (bForceBuy)
+                iCost = (iPrimaryCSW == CSW_MAC10 || iPrimaryCSW == CSW_MP5NAVY || iPrimaryCSW == CSW_UMP45) ? 2100 : 2800;
+            else
+                iCost = (iSecondaryCSW == CSW_DEAGLE) ? 650 : ((iSecondaryCSW == CSW_P228) ? 300 : 0);
+
             cs_set_user_money(id, max(0, iMoney - iCost), 1);
         }
     }
@@ -454,21 +721,6 @@ public OnPlayerSpawnPost(id)
         {
             AssignBotRoleDeterministic(id);
         }
-
-        // Freeze bots during freeze time in live match & knife round
-        if (g_bInFreezeTime && !IsWarmupActive() && !IsDeathmatchActive())
-        {
-            new flags = pev(id, pev_flags);
-            set_pev(id, pev_flags, flags | FL_FROZEN);
-            set_pev(id, pev_velocity, Float:{0.0, 0.0, 0.0});
-        }
-
-        // Loadout Warmup ditangani langsung oleh csgo_competitive.sma, dan Deathmatch oleh redm_listen_engine.sma
-        if (!IsKnifeRoundActive() && !IsWarmupActive() && !IsDeathmatchActive())
-        {
-            remove_task(TASK_SV_SPAWN_EQUIP + id);
-            set_task(0.10, "Task_SpawnRoleEquip", TASK_SV_SPAWN_EQUIP + id);
-        }
     }
     else
     {
@@ -480,15 +732,6 @@ public OnPlayerSpawnPost(id)
     }
 
     return HAM_IGNORED;
-}
-
-public Task_SpawnRoleEquip(taskid)
-{
-    new id = taskid - TASK_SV_SPAWN_EQUIP;
-    if (is_user_alive(id) && is_user_bot(id) && !IsKnifeRoundActive())
-    {
-        EquipBotByRole(id, true, true);
-    }
 }
 
 public Task_ShowRoleMenuDelayed(taskid)

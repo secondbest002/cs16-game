@@ -65,6 +65,34 @@ new g_KillsInRound[33];
 new g_BombPlanter = 0;
 new g_BombDefuser = 0;
 
+// Match-Wide Scoreboard Telemetry (BP-04)
+enum {
+    WIN_REASON_NONE = 0,
+    WIN_REASON_ELIM,
+    WIN_REASON_BOMB,
+    WIN_REASON_DEFUSE,
+    WIN_REASON_TIME
+};
+
+#define MAX_ROUND_HISTORY 36
+
+new g_PlayerAssists[33];
+new g_PlayerMVPs[33];
+new g_TotalMatchDamage[33];
+new g_PendingWinReason = WIN_REASON_NONE;
+new Float:g_LastRoundWinTime = 0.0;
+new g_RoundHistCount = 0;
+new g_RoundHistWinner[MAX_ROUND_HISTORY];
+new g_RoundHistReason[MAX_ROUND_HISTORY];
+new g_MsgPlayerStats = 0;
+new g_MsgRoundHist = 0;
+
+stock bool:IsLiveMatchState()
+{
+    return (g_MatchState == STATE_LIVE_HALF_1 || g_MatchState == STATE_LIVE_HALF_2 ||
+            g_MatchState == STATE_OVERTIME_1 || g_MatchState == STATE_OVERTIME_2);
+}
+
 // CS:GO Loss Bonus Ladder (Levels 0..4)
 // Level 0 = $1400, Level 1 = $1900, Level 2 = $2400, Level 3 = $2900, Level 4 = $3400
 new g_LossStreakCT = 0;

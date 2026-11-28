@@ -35,6 +35,9 @@
 #include <engine>
 #include <xs>
 #include <fun>
+#define AMXMODX_NOAUTOLOAD
+#include <yapb>
+#undef AMXMODX_NOAUTOLOAD
 #include <cs2_sdk/cs2_offsets>
 #include <cs2_sdk/cs2_state_cvars>
 #include <cs2_sdk/cs2_api>
@@ -44,10 +47,13 @@
 #include "bot_savage/core/savage_taskids.inc"
 #include "bot_savage/core/savage_defs.inc"
 
+#include "bot_savage/modules/savage_yapb_bridge.inl"
 #include "bot_savage/modules/savage_scavenge_utils.inl"
 #include "bot_savage/modules/savage_roles_loadout.inl"
 #include "bot_savage/modules/savage_igl_strats.inl"
 #include "bot_savage/modules/savage_esports_chat.inl"
+#include "bot_savage/modules/savage_hazard_ai.inl"
+#include "bot_savage/modules/savage_molotov_tactics.inl"
 #include "bot_savage/modules/savage_drop_economy.inl"
 #include "bot_savage/modules/savage_combat_tick.inl"
 #include "bot_savage/modules/savage_reflex_esp.inl"
@@ -89,9 +95,26 @@ public plugin_precache()
 public plugin_natives()
 {
     register_library("bot_savage_ai");
-    set_native_filter("cs2_sdk_native_filter");
+    set_module_filter("savage_module_filter");
+    set_native_filter("savage_native_filter");
     register_native("savage_get_player_role", "_native_get_player_role", 0);
     register_native("savage_equip_bot_role", "_native_equip_bot_role", 0);
+}
+
+public savage_module_filter(const library[], LibType:type)
+{
+    if (type == LibType_Library && equali(library, "yapb"))
+        return PLUGIN_HANDLED;
+
+    return PLUGIN_CONTINUE;
+}
+
+public savage_native_filter(const name[], index, trap)
+{
+    if (!trap && equal(name, "yb_", 3))
+        return PLUGIN_HANDLED;
+
+    return cs2_sdk_native_filter(name, index, trap);
 }
 
 public SavageRole:_native_get_player_role(plugin_id, num_params)
@@ -210,6 +233,8 @@ public plugin_init()
     set_task(0.15, "Task_SoundESPScanner", TASK_SV_SOUND, _, _, "b");
     set_task(0.35, "Task_ScavengeGroundWeapons", TASK_SV_SCAVENGE, _, _, "b");
     set_task(0.30, "Task_TacticalMidLineupScanner", TASK_SV_MID_SCAN, _, _, "b");
+    set_task(0.25, "Task_HazardMonitor", TASK_SV_HAZARD_SCAN, _, _, "b");
+    set_task(0.50, "Task_TacticalMolotovScanner", TASK_SV_MOLOTOV_SCAN, _, _, "b");
 
     server_print("[%s v%s] Activated successfully. Tier-1 Esports AI online.", PLUGIN_NAME, PLUGIN_VERSION);
 }
@@ -228,12 +253,12 @@ public plugin_cfg()
 
     InitMapMidPoint();
     InitBombsites();
+    Savage_Bridge_Init();
 }
 
 public client_putinserver(id)
 {
     remove_task(TASK_SV_ROLE_MENU + id);
-    remove_task(TASK_SV_SPAWN_EQUIP + id);
     remove_task(TASK_SV_REFILL_AMMO + id);
     ResetBotState(id);
     g_iPlayerRole[id] = ROLE_NONE;
@@ -246,7 +271,6 @@ public client_disconnected(id)
     g_iPlayerRole[id] = ROLE_NONE;
     g_bRoleSelected[id] = false;
     remove_task(TASK_SV_ROLE_MENU + id);
-    remove_task(TASK_SV_SPAWN_EQUIP + id);
     remove_task(TASK_SV_REFILL_AMMO + id);
 }
 
@@ -288,4 +312,7 @@ ResetBotState(id)
     g_iLastDamageTarget[id] = 0;
     g_iLastDamageDealt[id] = 0;
     g_flLastDamageTime[id] = 0.0;
+    g_flNextMacroGoalPush[id] = 0.0;
+
+    Savage_Bridge_ResetBot(id);
 }
